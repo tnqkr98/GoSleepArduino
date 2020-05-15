@@ -80,8 +80,10 @@ void modeControl(){
         modeBackEnable = false;
         sleepModeWorking();
     }
+    
     if(MODE == SENS_MODE)
-       sensingModeWorking();
+        sensingModeWorking();
+        
     if(MODE == WAKE_MODE){
         alarmWorking();
         modeNextEnable = true;
