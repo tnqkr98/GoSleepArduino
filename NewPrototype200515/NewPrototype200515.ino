@@ -37,19 +37,19 @@ bool distanceCheck();                     // [거리 측정 모드] 동작 함�
 void sleepModeWorking();                  // [수면 모드] 동작 함수
 void sensingModeWorking();                // [센싱 모드] 동작 함수
 void alarmWorking();                      // [기상 모드] 동작 함수
-void VELVE(bool in);                      // 이하 모듈 제어(ON/OFF)
-void FAN(bool in);
-void HEAT(bool in);
+void VELVE(bool in,bool android);         // 이하 모듈 제어(ON/OFF)
+void FAN(bool in,bool android);
+void HEAT(bool in,bool android);
 
 void _printf(const char *s, ...){
-    va_list args;
-    va_start(args, s);
-    int n = vsnprintf(NULL, 0, s, args);
-    char *str = new char[n+1];
-    vsprintf(str, s, args);
-    va_end(args);
-    Serial.print(str);
-    delete [] str;
+  va_list args;
+  va_start(args, s);
+  int n = vsnprintf(NULL, 0, s, args);
+  char *str = new char[n+1];
+  vsprintf(str, s, args);
+  va_end(args);
+  Serial.print(str);
+  delete [] str;
 }
 
 void setup(){
@@ -85,8 +85,15 @@ void loop(){
 }
 /*----------------------------------- 각종 모드 제어 함수 */
 void modeControl(){
-    if(MODE == DIST_MODE)
+    if(MODE == WAIT_MODE){
+       modeNextEnable = true;
+       modeBackEnable = false;
+    }
+
+    if(MODE == DIST_MODE){
         modeNextEnable = distanceCheck();
+        modeBackEnable = true;
+    }
 
     if(MODE == SLEEP_MODE){
         sleepModeWorking();
@@ -95,7 +102,7 @@ void modeControl(){
     
     if(MODE == SENS_MODE){
         sensingModeWorking();
-        modeNextEnable = false;
+        modeNextEnable = true; // 일단
         //modeBackEnable = false;
     }
         
@@ -104,9 +111,6 @@ void modeControl(){
         modeNextEnable = true;
         modeBackEnable = true;
     }
-    
-    if(MODE >= 7) MODE = 6;
-    if(MODE <= 0) MODE = WAIT_MODE;
 }
 /*----------------------------------- [거리 측정 모드] 동작 함수 */
 bool distanceCheck(){
@@ -124,9 +128,9 @@ void sleepModeWorking(){
     pixels.show();
 
     for(int i=0;i<25;i++){  // 수면 시나리오
-        if(i==0)FAN(ON);
-        if(i==5)VELVE(ON);
-        if(i==20)VELVE(OFF);
+        if(i==0)FAN(ON,false);
+        if(i==5)VELVE(ON,false);
+        if(i==20)VELVE(OFF,false);
 
         _printf("수면 모드 %2d 분 : ",i+1);
         if(i<5){
@@ -142,17 +146,16 @@ void sleepModeWorking(){
           _printf("팬속도 감소 %d\n",fanSpeed);
         }
 
-        if(i==24) FAN(OFF);
+        if(i==24) FAN(OFF,false);
         sendAndroidMessage(1);
         parseAndroidMessage();
         
         if(MODE == SLEEP_MODE-1){      // 수면모드 강제 중단
-          VELVE(OFF); FAN(OFF);
+          VELVE(OFF,false); FAN(OFF,false);
           fanSpeed = save_fan_speed;
           return;
         }
         /*if(MODE == SLEEP_MODE+1){      // 수면모드 일시 중단 (보류)
-          VELVE(OFF); FAN(OFF);
           while(
         }*/
         
@@ -172,14 +175,18 @@ void alarmWorking(){
     pixels.fill(pixels.Color(255, 255, 255), 0, NUM_PIXELS);
     pixels.setBrightness(0);
     pixels.show();
-  
+
+    FAN(ON,false);
     for(int i=1;i<=15;i++){            // 정확히는 기상 15분전에 동작시작
-       _printf("기상 모드 : LED 밝기 증가 , FAN 속도 증가 %d 분\n",i);
+       fanSpeed+=17;
+       if(fanSpeed > 256) fanSpeed = 255; // 최대치로
+       _printf("기상 모드 %d 분: LED 밝기 증가 , FAN 속도 증가(%3d)\n",i,fanSpeed);
         pixels.fill(pixels.Color(255, 255, 255), 0, NUM_PIXELS); 
         pixels.setBrightness(i*17);
         pixels.show();
         delay(500);
     }
+    FAN(OFF,false);
     MODE = WAIT_MODE;   // 대기 모드로 전환.
 }
 
@@ -240,8 +247,9 @@ void parseAndroidMessage(){
                   Serial.println("이전 모드로 이동 불가");
           }
           break;
-      case 't':   // 알람 시각 설정
+      case 't':   // 알람 시각 설정 (오류 검사 및 정상 수신 검사 코드 필요)
           memset(buf2,'\0',sizeof(buf2));
+          delay(10);
           for(int i=0;i<8;i++){
             buf2[i%2]=BTserial.read();delay(10);
             if(i%2 == 1)
@@ -252,12 +260,12 @@ void parseAndroidMessage(){
           SetAlramOn = true;
           break;
       case 'v':   // 밸브 on/off 설정
-          if(BTserial.read() == '1') VELVE(ON);
-          else VELVE(OFF);
+          if(BTserial.read() == '1') VELVE(ON,true);
+          else VELVE(OFF,true);
           break;
       case 'h':   // 열선 on/off 제어
-          if(BTserial.read() == '1') HEAT(ON);
-          else HEAT(OFF);
+          if(BTserial.read() == '1') HEAT(ON,true);
+          else HEAT(OFF,true);
           break;
       case 'f':   // 팬 속도 설정
           if(BTserial.peek() == 's'){
@@ -271,8 +279,8 @@ void parseAndroidMessage(){
             memset(buf3,'\0',sizeof(buf3));
           }
           else // 팬 on/off 제어
-            if(BTserial.read() == '1') FAN(ON);
-            else FAN(OFF);
+            if(BTserial.read() == '1') FAN(ON,true);
+            else FAN(OFF,true);
           break;
       case 'z':
           Serial.println("CO2 영점 조절");
@@ -323,35 +331,32 @@ void moodLedControl(int r,int g,int b){
     pixels.show();
 }
 /*----------------------------------- 모듈 제어 함수 */
-void VELVE(bool in){
-  if(in == ON){
-    Serial.println("Velve ON");
-    BTserial.print("v");BTserial.println(",1");
-  }
-  else {
-    Serial.println("Velve OFF");
-    BTserial.println("v,0");
-  }
+void VELVE(bool in,bool android){
+  if(in == ON)Serial.println("Velve ON");
+  else Serial.println("Velve OFF");
+
+  if(!android && in){
+    BTserial.print("v");BTserial.println(",1");}
+  else if(!android && !in){
+    BTserial.print("v");BTserial.println(",0");}
 }
-void FAN(bool in){
-  if(in == ON){
-    Serial.println("Fan ON");
-    BTserial.print("f");BTserial.println(",1");
-  }
-  else{
-    Serial.println("Fan OFF");
-    BTserial.print("f");BTserial.println(",0");
-  }
+void FAN(bool in,bool android){
+  if(in == ON)Serial.println("Fan ON");
+  else Serial.println("Fan OFF");
+    
+  if(!android && in){
+    BTserial.print("f");BTserial.println(",1");}
+  else if(!android && !in){
+    BTserial.print("f");BTserial.println(",0"); }
 }
-void HEAT(bool in){
-  if(in == ON){
-    Serial.println("Heat ON");
-    BTserial.print("h");BTserial.println(",1");
-  }
-  else {
-    Serial.println("Heat OFF"); 
-    BTserial.print("h");BTserial.println(",0");
-  }
+void HEAT(bool in,bool android){
+  if(in == ON)Serial.println("Heat ON");
+  else Serial.println("Heat OFF"); 
+
+  if(!android && in){
+    BTserial.print("h");BTserial.println(",1");}
+  else if(!android && !in){
+    BTserial.print("h");BTserial.println(",0");}
 }
 /*----------------------------------- 로그 출력용 함수 */
 void printLog(bool direct){
