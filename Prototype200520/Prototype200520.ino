@@ -4,19 +4,21 @@
 #include <Wire.h>
 #include <Adafruit_NeoPixel.h>
 
-#define DHTPIN    A0
+#define DHTPIN            A0    // 온습도 아날로그
+#define INFRARED_SENSOR   A1    // 적외선 아날로그
 
-#define BLUETOOTHWAITING  5     // 5초 이상 안드로이드로 부터 ack 받지 못하면 연결 끊긴것(송수신 범위 벗어남)
-#define SENDING_TICK      3     // 3초에 한번씩 안드로이드로 센싱값 전송
+#define BLUETOOTHWAITING  5     // n초 이상 안드로이드로 부터 ack 받지 못하면 연결 끊긴것(송수신 범위 벗어남)
+#define SENDING_TICK      1     // n초에 한번씩 안드로이드로 센싱값 전송
+#define DIST_LOWER       20     // 거리 최소
+#define DIST_UPPER       30     // 거리 최대
 #define NUM_PIXELS       12     // 네오픽셀 LED 개수 
 
-enum{BT_RX=17,BT_TX=16,LED_PIN=33};          // 핀 번호
+enum{LED_PIN=33};               // 핀 번호
 enum{STOP_MODE=1,WAIT_MODE,DIST_MODE,SLEEP_MODE,SENS_MODE,WAKE_MODE};
 
 DHT dht(DHTPIN, DHT11);
-SoftwareSerial BTserial(BT_RX,BT_TX);
 DS3231 rtc;
-Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUM_PIXELS,LED_PIN, NEO_GRBW + NEO_KHZ800);
+Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUM_PIXELS,LED_PIN, NEO_GRB + NEO_KHZ800);
 
 short MODE = 2, fanSpeed = 80, brightness = 128;
 
@@ -57,7 +59,9 @@ void setup(){
   #endif 
   Wire.begin();
   Serial.begin(9600);
-  BTserial.begin(9600);
+  Serial1.begin(9600);  // CO2
+  Serial2.begin(9600);  // Bluetooth
+  
   pixels.setBrightness(128);
   pixels.begin();
   pixels.show();
@@ -115,12 +119,30 @@ void modeControl(){
     }
 }
 /*----------------------------------- [거리 측정 모드] 동작 함수 */
-bool distanceCheck(){
-    // 거리 측정 해서 적정 거리 시, true 반환
-    
-  
+bool distanceCheck(){   // 거리 측정 해서 적정 거리 시, true 반환
+    int dist = getDistance();
+    pixels.setBrightness(30);       // 거리조절모드 밝기
+    Serial.println(dist);
+    if(dist < DIST_LOWER){  // 가깝
+      pixels.setPixelColor(0, pixels.Color(10, 0, 0));
+      return false;
+    } else if((dist < DIST_UPPER )){ //적절
+      pixels.setPixelColor(0, pixels.Color(0, 10, 0));
+      return false;
+    } else {  // 멀음
+      pixels.setPixelColor(0, pixels.Color(0, 0, 10));
+      return false;
+    }
+    pixels.show();
+    delay(1000);
     return true;
 }
+
+int getDistance(){  // 적외선 모듈 이용, 거리(cm) 반환
+  int volt = map(analogRead(INFRARED_SENSOR), 0, 1023, 0, 5000); 
+  return (27.61 / (volt - 0.1696)) * 1000;
+}
+
 /*----------------------------------- [수면 모드] 동작 함수 */
 void sleepModeWorking(){
     static short save_fan_speed = fanSpeed;
@@ -199,38 +221,44 @@ void sendAndroidMessage(bool direct){     // 매개변수: 전송 주기 관계�
     if(sendTime == SENDING_TICK*1000 || direct){
       int h = dht.readHumidity();
       int t = dht.readTemperature();
-      BTserial.print(h);BTserial.print(",");BTserial.print(t);      // 온습도상태 송신
-      BTserial.print(",");BTserial.print(fanSpeed);BTserial.print(","); // 팬속도 송신
-      BTserial.println(MODE);   // 현재모드상태 송신
+      int co2 = Serial1.parseInt(); 
+      int d = getDistance();
+      
+      Serial2.print(h);Serial2.print(",");            // 온도 송신
+      Serial2.print(t);Serial2.print(",");            // 습도 송신
+      Serial2.print(fanSpeed);Serial2.print(",");     // 팬속도 송신
+      Serial2.print(MODE);Serial2.print(",");         // 현재모드상태 송신
+      Serial2.print(co2*10);Serial2.print(",");       // CO2 송신
+      Serial2.println(d);                             // 거리 송신
       sendTime = 0;
     }
 }
 /*----------------------------------- 안드로이드 실제 수신 메시지(RAW) 출력 */
 void rawMessage(){
   //parseAndroidMessage 와 동시사용 불가
-  while(BTserial.peek()!=-1)
-      Serial.write(BTserial.read());
-  /*if(BTserial.available())
-      Serial.write(BTserial.read());
+  while(Serial2.peek()!=-1)
+      Serial.write(Serial2.read());
+  /*if(Serial2.available())
+      Serial.write(Serial2.read());
   if(Serial.available())
-      BTserial.write(Serial.read());*/
+      Serial2.write(Serial.read());*/
 }
 
 /*----------------------------------- 안드로이드 수신 메시지 분석 함수 */
 void parseAndroidMessage(){
   int readHead;
-  if(BTserial.available())
+  if(Serial2.available())
       BluetoothOn = true;
   
-  if(BTserial.peek()!=-1){
-    readHead = BTserial.read();delay(10); // 너무 빨리 읽으면 문자열이 깨짐(혹은 쓰레기값)
+  if(Serial2.peek()!=-1){
+    readHead = Serial2.read();delay(10); // 너무 빨리 읽으면 문자열이 깨짐(혹은 쓰레기값)
     switch(readHead){
       case 'a':   // 안드로이드와 현재 연결 상태인가?
           BluetoothOn = true;
           bluetoothCount = 0;
           break;
       case 'm':   // 모드 변경 
-          c = BTserial.read();
+          c = Serial2.read();
           if(c == 'n'){
               Serial.println("From Android >> 다음 모드로 이동");
               if(!modeNextEnable)
@@ -251,13 +279,13 @@ void parseAndroidMessage(){
       case 't':   // 알람 시각 설정 (오류 검사 및 정상 수신 검사 코드 필요)
           memset(buf3,'\0',sizeof(buf3));
           delay(10);
-          if(BTserial.peek() == 'r'){
+          if(Serial2.peek() == 'r'){
              _printf("From Android >> 알람 리셋\n");
              SetAlramOn = false;
           }
           else{
             for(int i=0;i<8;i++){
-              buf3[i%2]=BTserial.read();delay(10);
+              buf3[i%2]=Serial2.read();delay(10);
               if(i%2 == 1){
                 buf3[2] = '\0';
                 time[t++] = atoi(buf3);
@@ -269,18 +297,18 @@ void parseAndroidMessage(){
           }
           break;
       case 'v':   // 밸브 on/off 설정
-          if(BTserial.read() == '1') VELVE(ON,true);
+          if(Serial2.read() == '1') VELVE(ON,true);
           else VELVE(OFF,true);
           break;
       case 'h':   // 열선 on/off 제어
-          if(BTserial.read() == '1') HEAT(ON,true);
+          if(Serial2.read() == '1') HEAT(ON,true);
           else HEAT(OFF,true);
           break;
       case 'f':   // 팬 속도 설정
-          if(BTserial.peek() == 's'){
-            BTserial.read(); delay(10);
+          if(Serial2.peek() == 's'){
+            Serial2.read(); delay(10);
             for(int i=0;i<3;i++){
-              buf3[i] = BTserial.read();
+              buf3[i] = Serial2.read();
               delay(10);
             }
             fanSpeed = atoi(buf3);
@@ -288,34 +316,34 @@ void parseAndroidMessage(){
             memset(buf3,'\0',sizeof(buf3));
           }
           else // 팬 on/off 제어
-            if(BTserial.read() == '1') FAN(ON,true);
+            if(Serial2.read() == '1') FAN(ON,true);
             else FAN(OFF,true);
           break;
       case 'z':
           Serial.println("CO2 영점 조절");
           break;
       case 'l':   //LED 조절
-          if(BTserial.peek() == 'e'){
+          if(Serial2.peek() == 'e'){
               Serial.println("MOOD LED OFF");
               pixels.fill(pixels.Color(0, 0, 0), 0, NUM_PIXELS);
               pixels.show();
               LED_MOOD_ON = false;
           }
-          else if(BTserial.peek() == 'p'){
+          else if(Serial2.peek() == 'p'){
               Serial.println("MOOD LED ON");
-              BTserial.read(); delay(5);
+              Serial2.read(); delay(5);
               for(int i=0;i<3;i++){
                   for(int j=0;j<3;j++){
-                      buf_rgb[i][j] = BTserial.read();delay(5);
+                      buf_rgb[i][j] = Serial2.read();delay(5);
                   }
                   buf_rgb[i][3] = '\0';
               }
               LED_MOOD_ON = true;
           }
-          else if(BTserial.peek() == 'b'){
-              BTserial.read();delay(5);
+          else if(Serial2.peek() == 'b'){
+              Serial2.read();delay(5);
               for(int i=0;i<3;i++){
-                  buf3[i] = BTserial.read();delay(5);
+                  buf3[i] = Serial2.read();delay(5);
               }
               brightness = atoi(buf3);
           }
@@ -327,8 +355,8 @@ void parseAndroidMessage(){
           break;
     }
 
-    while(BTserial.peek() != -1) //남은 버퍼 제거
-        BTserial.read();
+    while(Serial2.peek() != -1) //남은 버퍼 제거
+        Serial2.read();
   }
 }
 /*----------------------------------- 조명 제어 함수 */
@@ -345,27 +373,27 @@ void VELVE(bool in,bool android){
   else Serial.println("Velve OFF");
 
   if(!android && in){
-    BTserial.print("v");BTserial.println(",1");}
+    Serial2.print("v");Serial2.println(",1");}
   else if(!android && !in){
-    BTserial.print("v");BTserial.println(",0");}
+    Serial2.print("v");Serial2.println(",0");}
 }
 void FAN(bool in,bool android){
   if(in == ON)Serial.println("Fan ON");
   else Serial.println("Fan OFF");
     
   if(!android && in){
-    BTserial.print("f");BTserial.println(",1");}
+    Serial2.print("f");Serial2.println(",1");}
   else if(!android && !in){
-    BTserial.print("f");BTserial.println(",0"); }
+    Serial2.print("f");Serial2.println(",0"); }
 }
 void HEAT(bool in,bool android){
   if(in == ON)Serial.println("Heat ON");
   else Serial.println("Heat OFF"); 
 
   if(!android && in){
-    BTserial.print("h");BTserial.println(",1");}
+    Serial2.print("h");Serial2.println(",1");}
   else if(!android && !in){
-    BTserial.print("h");BTserial.println(",0");}
+    Serial2.print("h");Serial2.println(",0");}
 }
 /*----------------------------------- 로그 출력용 함수 */
 void printLog(bool direct){
