@@ -1,18 +1,20 @@
-#include <SoftwareSerial.h> 
-
-SoftwareSerial mySerial(2, 3); 
 
 void setup() 
 {
   Serial.begin(9600);   
-  mySerial.begin(9600); 
+  Serial2.begin(9600); 
 }
 void loop()
 {
-  if (mySerial.available()) {       
-    Serial.write(mySerial.read());  
+  if (Serial2.available()) {       
+    Serial.write(Serial2.read());  
   }
   if (Serial.available()) {         
-    mySerial.write(Serial.read()); 
+    Serial2.write(Serial.read()); 
   }
+
+  //while(true){
+    //Serial.println("hi");
+  //  delay(1000);
+  //}
 }

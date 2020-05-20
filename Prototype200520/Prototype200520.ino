@@ -5,17 +5,16 @@
 #include <Adafruit_NeoPixel.h>
 
 #define DHTPIN    A0
-#define DHTTYPE   DHT11
 
 #define BLUETOOTHWAITING  5     // 5초 이상 안드로이드로 부터 ack 받지 못하면 연결 끊긴것(송수신 범위 벗어남)
 #define SENDING_TICK      3     // 3초에 한번씩 안드로이드로 센싱값 전송
-#define NUM_PIXELS        4     // 네오픽셀 LED 개수 
+#define NUM_PIXELS       12     // 네오픽셀 LED 개수 
 
-enum{RX=3,TX=2,LED_PIN};          // 핀 번호
+enum{BT_RX=17,BT_TX=16,LED_PIN=33};          // 핀 번호
 enum{STOP_MODE=1,WAIT_MODE,DIST_MODE,SLEEP_MODE,SENS_MODE,WAKE_MODE};
 
-DHT dht(DHTPIN, DHTTYPE);
-SoftwareSerial BTserial(TX,RX);
+DHT dht(DHTPIN, DHT11);
+SoftwareSerial BTserial(BT_RX,BT_TX);
 DS3231 rtc;
 Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUM_PIXELS,LED_PIN, NEO_GRBW + NEO_KHZ800);
 
@@ -53,6 +52,9 @@ void _printf(const char *s, ...){
 }
 
 void setup(){
+  #if defined (__AVR_ATtiny85__)
+   if (F_CPU == 16000000) clock_prescale_set(clock_div_1);
+  #endif 
   Wire.begin();
   Serial.begin(9600);
   BTserial.begin(9600);
@@ -208,7 +210,6 @@ void rawMessage(){
   //parseAndroidMessage 와 동시사용 불가
   while(BTserial.peek()!=-1)
       Serial.write(BTserial.read());
-
   /*if(BTserial.available())
       Serial.write(BTserial.read());
   if(Serial.available())
