@@ -1,5 +1,5 @@
 #include "HCMotor.h"
-#include "DHT.h"
+#include <DHT.h>
 #include "RTClib.h"
 #include <SoftwareSerial.h>
 #include <Wire.h>
@@ -78,11 +78,11 @@ void setup(){
 
 void loop(){
   if(SetAlramOn){
-    //DateTime now = rtc.now();
-    //  if(time[0] == now.month() && time[1] == now.day() && time[2] == now.hour() && time[3] == now.minute()){
-    //    SetAlramOn = false;
-    //    MODE = WAKE_MODE;
-    //  }
+    DateTime now = rtc.now();
+      if(time[0] == now.month() && time[1] == now.day() && time[2] == now.hour() && time[3] == now.minute()){
+        SetAlramOn = false;
+        MODE = WAKE_MODE;
+      }
   }
   //rawMessage();
   parseAndroidMessage();    // android 명령 처리
@@ -133,6 +133,14 @@ bool distanceCheck(){   // 거리 측정 해서 적정 거리 시, true 반환
     int dist = getDistance();
     static int logcount = 0;
     bool ret;
+
+    if(LED_MOOD_ON){
+      Serial.println("MOOD LED OFF");   // 무드등이 켜져있으면 끔
+      pixels.fill(pixels.Color(0, 0, 0), 0, NUM_PIXELS);
+      pixels.show();
+      LED_MOOD_ON = false;
+    }
+    
     pixels.setBrightness(30);       // 거리조절모드 밝기
     if((logcount++) == 1000){
       _printf("      ㄴ 대상과의 거리 : %d\n",dist);
@@ -253,9 +261,9 @@ void sendAndroidMessage(bool direct){     // 매개변수: 전송 주기 관계�
     static int sendTime = 0;
     sendTime++;
     if(sendTime == SENDING_TICK*1000 || direct){
-      int h = dht.readHumidity();
-      int t = dht.readTemperature();
-      int co2 = Serial1.parseInt(); 
+      long h = dht.readHumidity();    //int 로 커버가 안되나?
+      long t = dht.readTemperature();
+      long co2 = Serial1.parseInt(); 
       int d = getDistance();
       
       Serial2.print(h);Serial2.print(",");            // 온도 송신

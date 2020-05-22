@@ -1,23 +1,26 @@
-#include "DHT.h"
+#include "HCMotor.h"
+#include <DHT.h>
 #include "RTClib.h"
 #include <SoftwareSerial.h>
 #include <Wire.h>
 #include <Adafruit_NeoPixel.h>
 
-#define DHTPIN    A0
-#define DHTTYPE   DHT11
+#define DHTPIN            A0    // 온습도 아날로그
+#define INFRARED_SENSOR   A1    // 적외선 아날로그
 
-#define BLUETOOTHWAITING  5     // 5초 이상 안드로이드로 부터 ack 받지 못하면 연결 끊긴것(송수신 범위 벗어남)
-#define SENDING_TICK      3     // 3초에 한번씩 안드로이드로 센싱값 전송
+#define BLUETOOTHWAITING  5     // n초 이상 안드로이드로 부터 ack 받지 못하면 연결 끊긴것(송수신 범위 벗어남)
+#define SENDING_TICK      1     // n초에 한번씩 안드로이드로 센싱값 전송
+#define DIST_LOWER       20     // 거리 최소
+#define DIST_UPPER       30     // 거리 최대
 #define NUM_PIXELS        4     // 네오픽셀 LED 개수 
 
-enum{RX=3,TX=2,LED_PIN};          // 핀 번호
+enum{RX=3,TX=2,LED_PIN};  // 핀 번호
 enum{STOP_MODE=1,WAIT_MODE,DIST_MODE,SLEEP_MODE,SENS_MODE,WAKE_MODE};
 
-DHT dht(DHTPIN, DHTTYPE);
-SoftwareSerial BTserial(TX,RX);
-DS3231 rtc;
-Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUM_PIXELS,LED_PIN, NEO_GRBW + NEO_KHZ800);
+SoftwareSerial BTserial(RX,TX);
+DHT dht(DHTPIN, DHT11);
+RTC_DS3231 rtc;
+Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUM_PIXELS,LED_PIN, NEO_GRB + NEO_KHZ800);
 
 short MODE = 2, fanSpeed = 80, brightness = 128;
 
@@ -37,7 +40,8 @@ bool distanceCheck();                     // [거리 측정 모드] 동작 함�
 void sleepModeWorking();                  // [수면 모드] 동작 함수
 void sensingModeWorking();                // [센싱 모드] 동작 함수
 void alarmWorking();                      // [기상 모드] 동작 함수
-void VELVE(bool in,bool android);         // 이하 모듈 제어(ON/OFF)
+void keyInterrupt();                      // 물리 버튼 제어 함수
+void VELVE(bool in,bool android);         // 이하 모듈 제어(ON/OFF), 두번째 매개변수 false: 비동기 송신
 void FAN(bool in,bool android);
 void HEAT(bool in,bool android);
 
@@ -55,25 +59,38 @@ void _printf(const char *s, ...){
 void setup(){
   Wire.begin();
   Serial.begin(9600);
-  BTserial.begin(9600);
+//  Serial1.begin(9600);  // CO2
+  BTserial.begin(9600);  // Bluetooth
+
+//  pinMode(CO2VELVE, OUTPUT);
+  
+//  digitalWrite(CO2VELVE, HIGH);
+//  analogWrite(MOTOR_S, fanSpeed);
+
+  #if defined (__AVR_ATtiny85__)
+   if (F_CPU == 16000000) clock_prescale_set(clock_div_1);
+  #endif 
+
+  Serial.println("GoSleep ready");
   pixels.setBrightness(128);
   pixels.begin();
   pixels.show();
 }
 
 void loop(){
-  DateTime now = rtc.now();
-  if(SetAlramOn)
+  if(SetAlramOn){
+    DateTime now = rtc.now();
       if(time[0] == now.month() && time[1] == now.day() && time[2] == now.hour() && time[3] == now.minute()){
         SetAlramOn = false;
         MODE = WAKE_MODE;
       }
-
+  }
   //rawMessage();
-  parseAndroidMessage();
+  parseAndroidMessage();    // android 명령 처리
+  //keyInterrupt();           // key button 명령 처리
   sendAndroidMessage(0);
   printLog(0);
-  
+
   modeControl();
 
   bluetoothCount++;
@@ -81,7 +98,7 @@ void loop(){
     bluetoothCount = 0;
     BluetoothOn = false;
   }
-  //delay(1);
+  delay(1);
 }
 /*----------------------------------- 각종 모드 제어 함수 */
 void modeControl(){
@@ -113,12 +130,45 @@ void modeControl(){
     }
 }
 /*----------------------------------- [거리 측정 모드] 동작 함수 */
-bool distanceCheck(){
-    // 거리 측정 해서 적정 거리 시, true 반환
+bool distanceCheck(){   // 거리 측정 해서 적정 거리 시, true 반환
+    int dist = getDistance();
+    static int logcount = 0;
+    bool ret;
+
+    if(LED_MOOD_ON){
+      Serial.println("MOOD LED OFF");   // 무드등이 켜져있으면 끔
+      pixels.fill(pixels.Color(0, 0, 0), 0, NUM_PIXELS);
+      pixels.show();
+      LED_MOOD_ON = false;
+    }
     
-  
-    return true;
+    pixels.setBrightness(30);       // 거리조절모드 밝기
+    if((logcount++) == 1000){
+      _printf("      ㄴ 대상과의 거리 : %d\n",dist);
+      logcount = 0;
+    }
+    if(dist < DIST_LOWER){  // 가깝
+      pixels.setPixelColor(0, pixels.Color(10, 0, 0));
+      ret = false;
+    } else if((dist < DIST_UPPER )){ //적절
+      pixels.setPixelColor(0, pixels.Color(0, 10, 0));
+      ret = true;
+    } else {  // 멈
+      pixels.setPixelColor(0, pixels.Color(0, 0, 10));
+      ret = false;
+    }
+    pixels.show();
+    if(ret)
+      return true;
+    else
+       return false;
 }
+
+int getDistance(){  // 적외선 모듈 이용, 거리(cm) 반환
+  int volt = map(analogRead(INFRARED_SENSOR), 0, 1023, 0, 5000); 
+  return (27.61 / (volt - 0.1696)) * 1000;
+}
+
 /*----------------------------------- [수면 모드] 동작 함수 */
 void sleepModeWorking(){
     static short save_fan_speed = fanSpeed;
@@ -137,6 +187,7 @@ void sleepModeWorking(){
           fanSpeed+=50;
           if(fanSpeed > 256) fanSpeed = 255; // 최대치로
           _printf("팬속도 증가 %d\n",fanSpeed);
+//          analogWrite(MOTOR_S, fanSpeed);
         }
         else if(i<20)
           Serial.println("수면 가스 분사");
@@ -144,20 +195,36 @@ void sleepModeWorking(){
           fanSpeed-=50;
           if(fanSpeed <0) fanSpeed = 0; // 최소치로
           _printf("팬속도 감소 %d\n",fanSpeed);
+//          analogWrite(MOTOR_S, fanSpeed);
         }
 
         if(i==24) FAN(OFF,false);
         sendAndroidMessage(1);
-        parseAndroidMessage();
+        parseAndroidMessage();          // Android 명령 처리
         
         if(MODE == SLEEP_MODE-1){      // 수면모드 강제 중단
           VELVE(OFF,false); FAN(OFF,false);
           fanSpeed = save_fan_speed;
           return;
         }
-        /*if(MODE == SLEEP_MODE+1){      // 수면모드 일시 중단 (보류)
-          while(
-        }*/
+        
+        if(MODE == SLEEP_MODE+1){      // 수면모드 일시 중단 
+          VELVE(OFF,false); FAN(OFF,false);
+          Serial.print("수면모드 일시중단 ");
+          for(int i=0;;i++){
+            if(i==25000){
+              Serial.print(">");
+              i=0;
+            }
+            parseAndroidMessage();          // Android 명령 처리
+            if(MODE >= SLEEP_MODE+2){
+                MODE = SLEEP_MODE;
+                Serial.println("");
+                VELVE(ON,false); FAN(ON,false);
+                break;
+            }
+          }
+        }
         
         delay(1*500); // 1000 * 60 을 넣으면 분단위 수행 ( 비동기 종료를 위해선 이걸 쓰면안됨)
     }
@@ -195,11 +262,17 @@ void sendAndroidMessage(bool direct){     // 매개변수: 전송 주기 관계�
     static int sendTime = 0;
     sendTime++;
     if(sendTime == SENDING_TICK*1000 || direct){
-      int h = dht.readHumidity();
-      int t = dht.readTemperature();
-      BTserial.print(h);BTserial.print(",");BTserial.print(t);      // 온습도상태 송신
-      BTserial.print(",");BTserial.print(fanSpeed);BTserial.print(","); // 팬속도 송신
-      BTserial.println(MODE);   // 현재모드상태 송신
+      long h = dht.readHumidity();    //int 로 커버가 안되나?
+      long t = dht.readTemperature();
+//    long co2 = Serial1.parseInt(); 
+      int d = getDistance();
+      
+      BTserial.print(h);BTserial.print(",");            // 온도 송신
+      BTserial.print(t);BTserial.print(",");            // 습도 송신
+      BTserial.print(fanSpeed);BTserial.print(",");     // 팬속도 송신
+      BTserial.println(MODE);//BTserial.print(",");         // 현재모드상태 송신
+//      BTserial.print(co2*10);BTserial.print(",");       // CO2 송신
+//      BTserial.println(d);                             // 거리 송신
       sendTime = 0;
     }
 }
@@ -208,7 +281,6 @@ void rawMessage(){
   //parseAndroidMessage 와 동시사용 불가
   while(BTserial.peek()!=-1)
       Serial.write(BTserial.read());
-
   /*if(BTserial.available())
       Serial.write(BTserial.read());
   if(Serial.available())
@@ -231,7 +303,7 @@ void parseAndroidMessage(){
       case 'm':   // 모드 변경 
           c = BTserial.read();
           if(c == 'n'){
-              Serial.println("From Android >> 다음 모드로 이동");
+              _printf("\nFrom Android >> Next 버튼\n");
               if(!modeNextEnable)
                    Serial.println("다음 모드로 이동 불가");
               else{
@@ -240,7 +312,7 @@ void parseAndroidMessage(){
               }
           }
           else if(c == 'b'){
-              Serial.println("From Android >> 이전 모드로 이동");
+              _printf("\nFrom Android >> Back 버튼\n");
               if(modeBackEnable)
                   MODE--;
               else
@@ -284,6 +356,7 @@ void parseAndroidMessage(){
             }
             fanSpeed = atoi(buf3);
             _printf("팬 속도 설정 : %d\n",fanSpeed);
+//            analogWrite(MOTOR_S, fanSpeed); 
             memset(buf3,'\0',sizeof(buf3));
           }
           else // 팬 on/off 제어
@@ -340,17 +413,28 @@ void moodLedControl(int r,int g,int b){
 }
 /*----------------------------------- 모듈 제어 함수 */
 void VELVE(bool in,bool android){
-  if(in == ON)Serial.println("Velve ON");
-  else Serial.println("Velve OFF");
+  if(in == ON){
+    Serial.println("Velve ON");
+//    digitalWrite(CO2VELVE, LOW);
+  }
+  else {
+    Serial.println("Velve OFF");
+//    digitalWrite(CO2VELVE, HIGH);   //밸브 잠금
+  }
 
-  if(!android && in){
-    BTserial.print("v");BTserial.println(",1");}
-  else if(!android && !in){
-    BTserial.print("v");BTserial.println(",0");}
+  if(!android && in){BTserial.print("v");BTserial.println(",1");}
+  else if(!android && !in){BTserial.print("v");BTserial.println(",0"); }
 }
 void FAN(bool in,bool android){
-  if(in == ON)Serial.println("Fan ON");
-  else Serial.println("Fan OFF");
+  if(in == ON){
+    Serial.println("Fan ON");
+//    digitalWrite(MOTOR_L, HIGH);  
+ //   analogWrite(MOTOR_S, fanSpeed);   
+  }
+  else {
+    Serial.println("Fan OFF");
+//    digitalWrite(MOTOR_L, LOW);
+  }
     
   if(!android && in){
     BTserial.print("f");BTserial.println(",1");}
@@ -369,8 +453,7 @@ void HEAT(bool in,bool android){
 /*----------------------------------- 로그 출력용 함수 */
 void printLog(bool direct){
   static int printTime = 0;
-  printTime++;
-  if(printTime==1*1000 || direct){
+  if((printTime++)==1000 || direct){
        switch(MODE){
           case STOP_MODE:Serial.print(" 현재 상태 : 절전 모드 ");break;
           case WAIT_MODE:Serial.print(" 현재 상태 : 대기 모드 ");break;
@@ -382,7 +465,7 @@ void printLog(bool direct){
       if(BluetoothOn)Serial.print(" (안드로이드와 통신 ON) ");
       DateTime now = rtc.now();
       if(SetAlramOn){
-          Serial.print("  현재 시각 (알람설정됨) :");
+         Serial.print("  현재 시각 (알람설정됨) :");
           Serial.print(now.month()); Serial.print("월");
           Serial.print(now.day()); Serial.print("일");
           Serial.print(now.hour()); Serial.print("시");
