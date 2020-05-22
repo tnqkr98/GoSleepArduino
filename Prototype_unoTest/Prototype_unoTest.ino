@@ -1,5 +1,5 @@
 #include "HCMotor.h"
-#include <DHT.h>
+#include "DHT.h"
 #include "RTClib.h"
 #include <SoftwareSerial.h>
 #include <Wire.h>
@@ -14,13 +14,13 @@
 #define DIST_UPPER       30     // 거리 최대
 #define NUM_PIXELS        4     // 네오픽셀 LED 개수 
 
-enum{RX=3,TX=2,LED_PIN};  // 핀 번호
+enum{RX=2,TX,LED_PIN};  // 핀 번호
 enum{STOP_MODE=1,WAIT_MODE,DIST_MODE,SLEEP_MODE,SENS_MODE,WAKE_MODE};
 
 SoftwareSerial BTserial(RX,TX);
 DHT dht(DHTPIN, DHT11);
 RTC_DS3231 rtc;
-Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUM_PIXELS,LED_PIN, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUM_PIXELS,LED_PIN, NEO_GRBW + NEO_KHZ800);
 
 short MODE = 2, fanSpeed = 80, brightness = 128;
 
@@ -57,6 +57,7 @@ void _printf(const char *s, ...){
 }
 
 void setup(){
+  dht.begin();
   Wire.begin();
   Serial.begin(9600);
 //  Serial1.begin(9600);  // CO2
@@ -262,10 +263,13 @@ void sendAndroidMessage(bool direct){     // 매개변수: 전송 주기 관계�
     static int sendTime = 0;
     sendTime++;
     if(sendTime == SENDING_TICK*1000 || direct){
-      long h = dht.readHumidity();    //int 로 커버가 안되나?
-      long t = dht.readTemperature();
+      int h = dht.readHumidity();
+      float t = dht.readTemperature();
 //    long co2 = Serial1.parseInt(); 
       int d = getDistance();
+      Serial.println(h);
+      Serial.println(t);
+
       
       BTserial.print(h);BTserial.print(",");            // 온도 송신
       BTserial.print(t);BTserial.print(",");            // 습도 송신
@@ -296,7 +300,7 @@ void parseAndroidMessage(){
   if(BTserial.peek()!=-1){
     readHead = BTserial.read();delay(10); // 너무 빨리 읽으면 문자열이 깨짐(혹은 쓰레기값)
     switch(readHead){
-      case 'a':   // 안드로이드와 현재 연결 상태인가?
+      case 'a':   // 안드로이드와 현재 연결 상태인가? (끊겼다가 재연결 시, 정보 동기화 시나리오 필요)
           BluetoothOn = true;
           bluetoothCount = 0;
           break;

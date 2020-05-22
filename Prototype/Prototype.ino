@@ -1,5 +1,5 @@
 #include "HCMotor.h"
-#include <DHT.h>
+#include "DHT.h"
 #include "RTClib.h"
 #include <SoftwareSerial.h>
 #include <Wire.h>
@@ -56,6 +56,7 @@ void _printf(const char *s, ...){
 }
 
 void setup(){
+  dht.begin();
   Wire.begin();
   Serial.begin(9600);
   Serial1.begin(9600);  // CO2
@@ -261,8 +262,8 @@ void sendAndroidMessage(bool direct){     // 매개변수: 전송 주기 관계�
     static int sendTime = 0;
     sendTime++;
     if(sendTime == SENDING_TICK*1000 || direct){
-      long h = dht.readHumidity();    //int 로 커버가 안되나?
-      long t = dht.readTemperature();
+      int h = dht.readHumidity();
+      float t = dht.readTemperature();
       long co2 = Serial1.parseInt(); 
       int d = getDistance();
       
