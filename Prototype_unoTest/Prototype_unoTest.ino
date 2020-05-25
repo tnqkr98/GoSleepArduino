@@ -227,7 +227,7 @@ void sleepModeWorking(){
           }
         }
         
-        delay(1*500); // 1000 * 60 을 넣으면 분단위 수행 ( 비동기 종료를 위해선 이걸 쓰면안됨)
+        delay(1*500); // 1000 * 60 을 넣으면 분단위 수행 
     }
     MODE++;
 }
@@ -267,10 +267,9 @@ void sendAndroidMessage(bool direct){     // 매개변수: 전송 주기 관계�
       float t = dht.readTemperature();
 //    long co2 = Serial1.parseInt(); 
       int d = getDistance();
-      Serial.println(h);
-      Serial.println(t);
+      //Serial.println(h);
+      //Serial.println(t);
 
-      
       BTserial.print(h);BTserial.print(",");            // 온도 송신
       BTserial.print(t);BTserial.print(",");            // 습도 송신
       BTserial.print(fanSpeed);BTserial.print(",");     // 팬속도 송신
@@ -339,6 +338,11 @@ void parseAndroidMessage(){
               }
             }
            _printf("From Android >> 알람 설정 시간 : %d월 %d일 %d시 %d분\n",time[0],time[1],time[2],time[3]);
+            BTserial.print("t,");
+            BTserial.print(time[0]);BTserial.print(",");
+            BTserial.print(time[1]);BTserial.print(",");
+            BTserial.print(time[2]);BTserial.print(",");
+            BTserial.println(time[3]);
             t=0;
             SetAlramOn = true;
           }
@@ -400,6 +404,17 @@ void parseAndroidMessage(){
           break;
       case 'c':   // 통신 종료 메시지 수신의 경우 종료.
           BluetoothOn = false;
+          break;
+      case 'r':   // 끊겼다재연결시 아두이노 상태를 안드로이드에 동기화 하기위한 안드의 요청
+          if(SetAlramOn){
+            BTserial.print("t,");
+            BTserial.print(time[0]);BTserial.print(",");
+            BTserial.print(time[1]);BTserial.print(",");
+            BTserial.print(time[2]);BTserial.print(",");
+            BTserial.println(time[3]);
+          }
+          else
+            BTserial.println("t,n");
           break;
     }
 
