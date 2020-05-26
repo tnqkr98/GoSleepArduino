@@ -98,6 +98,8 @@ void loop(){
   if(bluetoothCount == BLUETOOTHWAITING*1000){
     bluetoothCount = 0;
     BluetoothOn = false;
+    pixels.fill(pixels.Color(0, 0, 0), 0, NUM_PIXELS);        // 블루투스 끊기면 불도 끄자
+    pixels.show();
   }
   delay(1);
 }
