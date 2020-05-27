@@ -5,16 +5,17 @@
 #include <Wire.h>
 #include <Adafruit_NeoPixel.h>
 
-#define DHTPIN            A0    // 온습도 아날로그
-#define INFRARED_SENSOR   A1    // 적외선 아날로그
+#define DHTPIN              A0    // 온습도 아날로그
+#define INFRARED_SENSOR     A1    // 적외선 아날로그
+#define ILLUMINANCE_SENSOR  A2    // 조도 아날로그(CDS)
 
 #define BLUETOOTHWAITING  5     // n초 이상 안드로이드로 부터 ack 받지 못하면 연결 끊긴것(송수신 범위 벗어남)
 #define SENDING_TICK      1     // n초에 한번씩 안드로이드로 센싱값 전송
 #define DIST_LOWER       20     // 거리 최소
 #define DIST_UPPER       30     // 거리 최대
-#define NUM_PIXELS       12     // 네오픽셀 LED 개수 
+#define NUM_PIXELS        8     // 네오픽셀 LED 개수 
 
-enum{MOTOR_L=2,MOTOR_S=3,CO2VELVE=31,LED_PIN=33};  // 핀 번호
+enum{MOTOR_L=2,MOTOR_S=3,CO2VELVE=22,LED_PIN=26,NEXT_BT=30,PREV_BT=28,MOOD=24,VIBE=32,SPEAKER=34};  // 핀 번호
 enum{STOP_MODE=1,WAIT_MODE,DIST_MODE,SLEEP_MODE,SENS_MODE,WAKE_MODE};
 
 DHT dht(DHTPIN, DHT11);
@@ -59,13 +60,19 @@ void setup(){
   dht.begin();
   Wire.begin();
   Serial.begin(9600);
-  Serial1.begin(9600);  // CO2
-  Serial2.begin(9600);  // Bluetooth
+  Serial1.begin(9600);  // 시리얼 1 : CO2
+  Serial2.begin(9600);  // 시리얼 2 : Bluetooth
 
-  pinMode(CO2VELVE, OUTPUT);
+  pinMode(CO2VELVE, OUTPUT);  //OPEN
+  pinMode(PREV_BT, INPUT);    //RED_BTN
+  pinMode(NEXT_BT, INPUT);    //BLUE_BTN
+  pinMode(SPEAKER, OUTPUT);   //SPEAKER_PIN
   
-  digitalWrite(CO2VELVE, HIGH);
-  analogWrite(MOTOR_S, fanSpeed);
+  digitalWrite(CO2VELVE, HIGH);   //OPEN
+  digitalWrite(PREV_BT, HIGH);    //RED_BTN
+  digitalWrite(NEXT_BT, HIGH);    //BLUE_BTN
+  
+  analogWrite(MOTOR_S, fanSpeed); //
 
   #if defined (__AVR_ATtiny85__)
    if (F_CPU == 16000000) clock_prescale_set(clock_div_1);
@@ -396,6 +403,17 @@ void parseAndroidMessage(){
           break;
       case 'c':   // 통신 종료 메시지 수신의 경우 종료.
           BluetoothOn = false;
+          break;
+      case 'r':   // 끊겼다재연결시 아두이노 상태를 안드로이드에 동기화 하기위한 안드의 요청
+          if(SetAlramOn){
+            Serial2.print("t,");
+            Serial2.print(time[0]);Serial2.print(",");
+            Serial2.print(time[1]);Serial2.print(",");
+            Serial2.print(time[2]);Serial2.print(",");
+            Serial2.println(time[3]);
+          }
+          else
+            Serial2.println("t,n");
           break;
     }
 
