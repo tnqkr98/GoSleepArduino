@@ -67,6 +67,7 @@ void setup(){
   pinMode(PREV_BT, INPUT);    //RED_BTN
   pinMode(NEXT_BT, INPUT);    //BLUE_BTN
   pinMode(SPEAKER, OUTPUT);   //SPEAKER_PIN
+  pinMode(ILLUMINANCE_SENSOR, INPUT);
   
   digitalWrite(CO2VELVE, HIGH);   //OPEN
   digitalWrite(PREV_BT, HIGH);    //RED_BTN
@@ -273,13 +274,15 @@ void sendAndroidMessage(bool direct){     // 매개변수: 전송 주기 관계�
       float t = dht.readTemperature();
       long co2 = Serial1.parseInt(); 
       int d = getDistance();
+      int cds = analogRead(ILLUMINANCE_SENSOR);
       
       Serial2.print(h);Serial2.print(",");            // 온도 송신
       Serial2.print(t);Serial2.print(",");            // 습도 송신
       Serial2.print(fanSpeed);Serial2.print(",");     // 팬속도 송신
       Serial2.print(MODE);Serial2.print(",");         // 현재모드상태 송신
       Serial2.print(co2*10);Serial2.print(",");       // CO2 송신
-      Serial2.println(d);                             // 거리 송신
+      Serial2.print(d);Serial2.print(",");            // 거리 송신
+      Serial2.println(cds);                           // 조도 송신
       sendTime = 0;
     }
 }
