@@ -8,7 +8,7 @@
 #define DHTPIN            A0    // 온습도 아날로그
 #define INFRARED_SENSOR   A1    // 적외선 아날로그
 
-#define BLUETOOTHWAITING  5     // n초 이상 안드로이드로 부터 ack 받지 못하면 연결 끊긴것(송수신 범위 벗어남)
+#define BLUETOOTHWAITING  3     // n초 이상 안드로이드로 부터 ack 받지 못하면 연결 끊긴것(송수신 범위 벗어남)
 #define SENDING_TICK      1     // n초에 한번씩 안드로이드로 센싱값 전송
 #define DIST_LOWER       20     // 거리 최소
 #define DIST_UPPER       30     // 거리 최대
