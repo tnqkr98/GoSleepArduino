@@ -1,7 +1,8 @@
 #include <SoftwareSerial.h>
 #include "Type4067Mux.h"
-#define PER 40
-#define MAX_ERR 10
+#define PER 0.3
+#define MAX_ERR 3
+#define AVG_COUNT 5        // MAX_ERR 보다 커야함.
 
 SoftwareSerial mux_1(A15,A14);
 SoftwareSerial mux_2(A13,A14);
@@ -80,97 +81,103 @@ void setup() {
   FAN[22].channel = 13;
 
   //initialize
+  //Serial.print("DATA,TIME,");
   for(int i=0;i<=56;i++)
     if(co2[i].channel >=0)
-      co2mux(true,i,co2[i].mux,co2[i].channel,true);
+      co2mux2(true,i,co2[i].mux,co2[i].channel,true);
   for(int i=0;i<=22;i++)
     if(FAN[i].channel >=0)
-      co2mux(true,i,FAN[i].mux,FAN[i].channel,false);
+      co2mux2(true,i,FAN[i].mux,FAN[i].channel,false);
+  //Serial.println(" ");
 }
 
 void loop() {
   Serial.print("DATA,TIME,");
   for(int i=0;i<=56;i++)
     if(co2[i].channel >=0)
-      co2mux(false,i,co2[i].mux,co2[i].channel,true);
+      co2mux2(false,i,co2[i].mux,co2[i].channel,true);
   for(int i=0;i<=22;i++)
     if(FAN[i].channel >=0)
-      co2mux(false,i,FAN[i].mux,FAN[i].channel,false);
+      co2mux2(false,i,FAN[i].mux,FAN[i].channel,false);
+  //co2mux2(11,co2[11].mux,co2[11].channel,true);
   Serial.println(" ");
 }
 
-void co2mux(bool init, int num, int mux, int channel, bool co2OrFan){  //true : co2, false :fan
-   long data,co2data;
-
-  do{
+void co2mux2(bool init,int num, int mux, int channel, bool co2OrFan){ 
+  int i=0,err_count =0;
+  long data,co2data=0,result=0,before;
+  
+  while(1){
     if(mux == 1){
-      data = mux1.read(channel);
-      delay(200); 
-      mux_1.listen();
-      mux_1.println("Z");
-      mux_1.flush();
-      mux_1.read();
-      co2data = mux_1.parseInt()*10;
+        data = mux1.read(channel);
+        delay(50); 
+        mux_1.listen();
+        mux_1.println("Z");
+        mux_1.flush();
+        mux_1.read();
+        co2data = mux_1.parseInt()*10;
     }else if(mux == 2){
-      data = mux2.read(channel);
-      delay(200);  
-      if(num != 56){
-        mux_2.listen();
-        mux_2.println("Z");
-        mux_2.flush();
-        mux_2.read();
-      }else if(num ==56){
-        head.listen();
-        head.println("Z");
-        head.flush();
-        mux_2.read();
-      }
-      co2data = mux_2.parseInt()*10;
-      if(num == 56)
-        mux_2.read();
+        data = mux2.read(channel);
+        delay(50);  
+        if(num != 56){
+          mux_2.listen();
+          mux_2.println("Z");
+          mux_2.flush();
+          mux_2.read();
+          co2data = mux_2.parseInt()*10;
+        }else if(num ==56){
+          head.listen();
+          head.println("Z");
+          head.flush();
+          mux_2.read();
+          co2data = head.parseInt()*10;
+        }
+        if(num == 56)
+          mux_2.read();
     }
-  }while((co2data == 0 && num != 56));
-  
-  if(co2OrFan){
-    if(init){
-      co2[num].before = co2data;
-      return;
-    }
-  
-    if(co2data >= co2[num].before*0.6 && co2data <= co2[num].before*1.4){
-      Serial.print(co2data);
-      delay(10);
-      Serial.print(",");
-      co2[num].before = co2data;
+    //Serial.println("");Serial.print("!");Serial.print(co2data); Serial.print(", i : ");Serial.print(i);Serial.println("  ");
+    if(i==0)
+      before = co2data;
+      
+    if(co2data!=0 && ((before*(1-PER) < co2data) && (before*(1+PER) > co2data))){
+      result += co2data;
+      before = co2data;
+      err_count =0;
+      i++;
     }else{
-      Serial.print(co2[num].before);
-      delay(10);
-      Serial.print(",");
-      co2[num].err_count++;
-      if(co2[num].err_count == MAX_ERR){
-        co2[num].err_count =0;
-        co2[num].before = co2data;
+      err_count++;
+      if(err_count ==MAX_ERR){
+        err_count =0;
+        before = co2data;
       }
     }
+    
+    if(i == AVG_COUNT) break;
   }
-  else{
-    if(init){
-      FAN[num].before = co2data;
-      return;
-    }  
   
-    if(co2data >= FAN[num].before*0.6 && co2data <= FAN[num].before*1.4){
-      Serial.print(co2data);
-      Serial.print(",");
-      FAN[num].before = co2data;
-    }else{
-      Serial.print(FAN[num].before);
-      Serial.print(",");
-      FAN[num].err_count++;
-      if(FAN[num].err_count == MAX_ERR){
-        FAN[num].err_count =0;
-        FAN[num].before = co2data;
-      }
-    }
+  if(init && co2OrFan){
+    co2[num].before = result/AVG_COUNT;
+    //Serial.print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>");
+    //Serial.print(co2[num].before);
+    //Serial.print(",");
   }
+
+  if(init && !co2OrFan){
+    FAN[num].before = result/AVG_COUNT;
+    //Serial.print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>");
+    //Serial.print(FAN[num].before);
+    //Serial.print(",");
+  }
+    
+  if(!init && co2OrFan){
+    //Serial.print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>");
+    Serial.print((result/AVG_COUNT + co2[num].before)/2);
+    Serial.print(",");
+  }
+  else if(!init && !co2OrFan){
+    //Serial.print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>");
+    Serial.print((result/AVG_COUNT + FAN[num].before)/2);
+    Serial.print(",");
+  }
+  
 }
