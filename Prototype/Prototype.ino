@@ -9,11 +9,11 @@
 #define INFRARED_SENSOR     A1    // 적외선 아날로그
 #define ILLUMINANCE_SENSOR  A2    // 조도 아날로그(CDS)
 
-#define BLUETOOTHWAITING  5     // n초 이상 안드로이드로 부터 ack 받지 못하면 연결 끊긴것(송수신 범위 벗어남)
+#define BLUETOOTHWAITING  3     // n초 이상 안드로이드로 부터 ack 받지 못하면 연결 끊긴것(송수신 범위 벗어남)
 #define SENDING_TICK      1     // n초에 한번씩 안드로이드로 센싱값 전송
 #define DIST_LOWER       20     // 거리 최소
 #define DIST_UPPER       30     // 거리 최대
-#define NUM_PIXELS        8     // 네오픽셀 LED 개수 
+#define NUM_PIXELS        4     // 네오픽셀 LED 개수 
 
 enum{MOTOR_L=2,MOTOR_S=3,CO2VELVE=22,LED_PIN=26,NEXT_BT=30,PREV_BT=28,MOOD=24,VIBE=32,SPEAKER=34};  // 핀 번호
 enum{STOP_MODE=1,WAIT_MODE,DIST_MODE,SLEEP_MODE,SENS_MODE,WAKE_MODE};
@@ -66,12 +66,14 @@ void setup(){
   pinMode(CO2VELVE, OUTPUT);  //OPEN
   pinMode(PREV_BT, INPUT);    //RED_BTN
   pinMode(NEXT_BT, INPUT);    //BLUE_BTN
+  pinMode(VIBE,OUTPUT);       
   pinMode(SPEAKER, OUTPUT);   //SPEAKER_PIN
   pinMode(ILLUMINANCE_SENSOR, INPUT);
   
   digitalWrite(CO2VELVE, HIGH);   //OPEN
-  digitalWrite(PREV_BT, HIGH);    //RED_BTN
-  digitalWrite(NEXT_BT, HIGH);    //BLUE_BTN
+  digitalWrite(PREV_BT, LOW);    //RED_BTN
+  digitalWrite(NEXT_BT, LOW);    //BLUE_BTN
+  digitalWrite(VIBE,LOW);
   
   analogWrite(MOTOR_S, fanSpeed); //
 
@@ -94,7 +96,7 @@ void loop(){
       }
   }
   //rawMessage();
-  parseAndroidMessage();    // android 명령 처리
+  parseAndroidMessage();      // android 명령 처리
   //keyInterrupt();           // key button 명령 처리
   sendAndroidMessage(0);
   printLog(0);
@@ -106,7 +108,7 @@ void loop(){
     bluetoothCount = 0;
     BluetoothOn = false;
   }
-  delay(1);
+  //delay(1);
 }
 /*----------------------------------- 각종 모드 제어 함수 */
 void modeControl(){
@@ -175,6 +177,7 @@ bool distanceCheck(){   // 거리 측정 해서 적정 거리 시, true 반환
 int getDistance(){  // 적외선 모듈 이용, 거리(cm) 반환
   int volt = map(analogRead(INFRARED_SENSOR), 0, 1023, 0, 5000); 
   return (27.61 / (volt - 0.1696)) * 1000;
+  //return 25;
 }
 
 /*----------------------------------- [수면 모드] 동작 함수 */
@@ -273,7 +276,7 @@ void sendAndroidMessage(bool direct){     // 매개변수: 전송 주기 관계�
       int h = dht.readHumidity();
       float t = dht.readTemperature();
       long co2 = Serial1.parseInt(); 
-      int d = getDistance();
+      long d = getDistance();
       int cds = analogRead(ILLUMINANCE_SENSOR);
       
       Serial2.print(h);Serial2.print(",");            // 온도 송신
@@ -289,8 +292,10 @@ void sendAndroidMessage(bool direct){     // 매개변수: 전송 주기 관계�
 /*----------------------------------- 안드로이드 실제 수신 메시지(RAW) 출력 */
 void rawMessage(){
   //parseAndroidMessage 와 동시사용 불가
-  while(Serial2.peek()!=-1)
+  
+ while(Serial2.peek()!=-1)
       Serial.write(Serial2.read());
+      
   /*if(Serial2.available())
       Serial.write(Serial2.read());
   if(Serial.available())
@@ -305,6 +310,7 @@ void parseAndroidMessage(){
   
   if(Serial2.peek()!=-1){
     readHead = Serial2.read();delay(10); // 너무 빨리 읽으면 문자열이 깨짐(혹은 쓰레기값)
+    //_printf("From Android >> 수신:%c%c\n",readHead,Serial2.peek());
     switch(readHead){
       case 'a':   // 안드로이드와 현재 연결 상태인가?
           BluetoothOn = true;
@@ -420,8 +426,8 @@ void parseAndroidMessage(){
           break;
     }
 
-    while(Serial2.peek() != -1) //남은 버퍼 제거
-        Serial2.read();
+    //while(Serial2.peek() != -1) //남은 버퍼 제거
+    //    Serial2.read();
   }
 }
 /*----------------------------------- 조명 제어 함수 */
@@ -448,7 +454,7 @@ void VELVE(bool in,bool android){
 }
 void FAN(bool in,bool android){
   if(in == ON){
-    Serial.println("Fan ON");
+    Serial.println("Fan ON");_printf("Fan ON, Fan Speed : %d\n",fanSpeed);
     digitalWrite(MOTOR_L, HIGH);  
     analogWrite(MOTOR_S, fanSpeed);   
   }
@@ -471,10 +477,20 @@ void HEAT(bool in,bool android){
   else if(!android && !in){
     Serial2.print("h");Serial2.println(",0");}
 }
+/*----------------------------------- 물리 버튼 제어 함수 */
+void keyInterrupt(){
+  if(digitalRead(PREV_BT) == HIGH){
+    _printf("물리버튼 제어 : Prev\n");
+    digitalWrite(VIBE,250);
+  }
+  if(digitalRead(NEXT_BT) == HIGH)
+    _printf("물리버튼 제어 : Next\n");
+}
+
 /*----------------------------------- 로그 출력용 함수 */
 void printLog(bool direct){
   static int printTime = 0;
-  if((printTime++)==1000 || direct){
+  if((printTime++)==2000 || direct){
        switch(MODE){
           case STOP_MODE:Serial.print(" 현재 상태 : 절전 모드 ");break;
           case WAIT_MODE:Serial.print(" 현재 상태 : 대기 모드 ");break;
