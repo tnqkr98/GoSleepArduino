@@ -9,7 +9,7 @@
 #define INFRARED_SENSOR     A1    // 적외선 아날로그
 #define ILLUMINANCE_SENSOR  A2    // 조도 아날로그(CDS)
 
-#define BLUETOOTHWAITING  3     // n초 이상 안드로이드로 부터 ack 받지 못하면 연결 끊긴것(송수신 범위 벗어남)
+#define BLUETOOTHWAITING  5     // n초 이상 안드로이드로 부터 ack 받지 못하면 연결 끊긴것(송수신 범위 벗어남)
 #define SENDING_TICK      1     // n초에 한번씩 안드로이드로 센싱값 전송
 #define DIST_LOWER       20     // 거리 최소
 #define DIST_UPPER       30     // 거리 최대
@@ -56,6 +56,8 @@ void _printf(const char *s, ...){
   delete [] str;
 }
 
+long n=0;
+
 void setup(){
   dht.begin();
   Wire.begin();
@@ -88,6 +90,7 @@ void setup(){
 }
 
 void loop(){
+  //Serial.println(1);
   if(SetAlramOn){
     DateTime now = rtc.now();
       if(time[0] == now.month() && time[1] == now.day() && time[2] == now.hour() && time[3] == now.minute()){
@@ -96,11 +99,13 @@ void loop(){
       }
   }
   //rawMessage();
+  //Serial.println(2);
   parseAndroidMessage();      // android 명령 처리
-  //keyInterrupt();           // key button 명령 처리
+  keyInterrupt();           // key button 명령 처리
+  //Serial.println(3);
   sendAndroidMessage(0);
+  //Serial.println(4);
   printLog(0);
-
   modeControl();
 
   bluetoothCount++;
@@ -108,7 +113,7 @@ void loop(){
     bluetoothCount = 0;
     BluetoothOn = false;
   }
-  //delay(1);
+  delay(1);
 }
 /*----------------------------------- 각종 모드 제어 함수 */
 void modeControl(){
@@ -365,10 +370,10 @@ void parseAndroidMessage(){
           break;
       case 'f':   // 팬 속도 설정
           if(Serial2.peek() == 's'){
-            Serial2.read(); delay(10);
+            Serial2.read(); delay(5);
             for(int i=0;i<3;i++){
               buf3[i] = Serial2.read();
-              delay(10);
+              delay(5);
             }
             fanSpeed = atoi(buf3);
             _printf("팬 속도 설정 : %d\n",fanSpeed);
@@ -394,7 +399,7 @@ void parseAndroidMessage(){
               Serial2.read(); delay(5);
               for(int i=0;i<3;i++){
                   for(int j=0;j<3;j++){
-                      buf_rgb[i][j] = Serial2.read();delay(5);
+                      buf_rgb[i][j] = Serial2.read();delay(1);
                   }
                   buf_rgb[i][3] = '\0';
               }
@@ -426,8 +431,8 @@ void parseAndroidMessage(){
           break;
     }
 
-    //while(Serial2.peek() != -1) //남은 버퍼 제거
-    //    Serial2.read();
+    while(Serial2.peek() != -1) //남은 버퍼 제거
+        Serial2.read();
   }
 }
 /*----------------------------------- 조명 제어 함수 */
@@ -481,10 +486,12 @@ void HEAT(bool in,bool android){
 void keyInterrupt(){
   if(digitalRead(PREV_BT) == HIGH){
     _printf("물리버튼 제어 : Prev\n");
-    digitalWrite(VIBE,250);
+    pinMode(VIBE,HIGH);
   }
-  if(digitalRead(NEXT_BT) == HIGH)
+  if(digitalRead(NEXT_BT) == HIGH){
     _printf("물리버튼 제어 : Next\n");
+     pinMode(VIBE,HIGH);
+  }
 }
 
 /*----------------------------------- 로그 출력용 함수 */
@@ -502,13 +509,12 @@ void printLog(bool direct){
       if(BluetoothOn)Serial.print(" (안드로이드와 통신 ON) ");
       DateTime now = rtc.now();
       if(SetAlramOn){
-        //Serial.println("왜이래?");
          Serial.print("  현재 시각 (알람설정됨) :");
-          Serial.print(now.month()); Serial.print("월");
-          Serial.print(now.day()); Serial.print("일");
-          Serial.print(now.hour()); Serial.print("시");
-          Serial.print(now.minute()); Serial.print("분");
-          Serial.print(now.second()); Serial.print("초");
+         Serial.print(now.month()); Serial.print("월");
+         Serial.print(now.day()); Serial.print("일");
+         Serial.print(now.hour()); Serial.print("시");
+         Serial.print(now.minute()); Serial.print("분");
+         Serial.print(now.second()); Serial.print("초");
       }
       Serial.println("");
       printTime = 0;
