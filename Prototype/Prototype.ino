@@ -26,9 +26,10 @@ short MODE = 2, fanSpeed = 80, brightness = 128;
 
 char c,buf2[2],buf3[3],buf_rgb[3][4];      // 각종 읽기 버퍼
 short time[4],t=0,bluetoothCount = 0;
-bool SetAlramOn = false, BluetoothOn = false, modeNextEnable = true, modeBackEnable = true;
-bool LED_MOOD_ON = false, LED_STATE_ON = false;
+bool SetAlramOn = false, BluetoothOn = false;
+bool LED_MOOD_ON = false, LED_STATE_ON = false, prevLastState, nextLastState;
 bool ON = true, OFF = false;
+int modeNextEnable, modeBackEnable;
 
 void parseAndroidMessage();               // 안드로이드 수신 메시지 분석 후 출력 함수
 void sendAndroidMessage(bool direct);     // 안드로이드 발신 메시지 설정 함수(0:동기, 1: 비동기)
@@ -45,6 +46,8 @@ void VELVE(bool in,bool android);         // 이하 모듈 제어(ON/OFF), 두�
 void FAN(bool in,bool android);
 void HEAT(bool in,bool android);
 
+bool rtcAvailabe();                      // RTC 모듈 예외처리
+
 void _printf(const char *s, ...){
   va_list args;
   va_start(args, s);
@@ -55,8 +58,6 @@ void _printf(const char *s, ...){
   Serial.print(str);
   delete [] str;
 }
-
-long n=0;
 
 void setup(){
   dht.begin();
@@ -92,11 +93,13 @@ void setup(){
 void loop(){
   //Serial.println(1);
   if(SetAlramOn){
-    DateTime now = rtc.now();
-      if(time[0] == now.month() && time[1] == now.day() && time[2] == now.hour() && time[3] == now.minute()){
-        SetAlramOn = false;
-        MODE = WAKE_MODE;
-      }
+    if(rtcAvailable()){
+      DateTime now = rtc.now();
+        if(time[0] == now.month() && time[1] == now.day() && time[2] == now.hour() && time[3] == now.minute()){
+          SetAlramOn = false;
+          MODE = WAKE_MODE;
+        }
+    }
   }
   //rawMessage();
   //Serial.println(2);
@@ -115,7 +118,7 @@ void loop(){
   }
   delay(1);
 }
-/*----------------------------------- 각종 모드 제어 함수 */
+/*-------------------------------------------------------------------------------------- 각종 모드 제어 함수 */
 void modeControl(){
     if(MODE == WAIT_MODE){
        modeNextEnable = true;
@@ -144,7 +147,7 @@ void modeControl(){
         modeBackEnable = true;
     }
 }
-/*----------------------------------- [거리 측정 모드] 동작 함수 */
+/*-------------------------------------------------------------------------------------- [거리 측정 모드] 동작 함수 */
 bool distanceCheck(){   // 거리 측정 해서 적정 거리 시, true 반환
     int dist = getDistance();
     static int logcount = 0;
@@ -185,7 +188,7 @@ int getDistance(){  // 적외선 모듈 이용, 거리(cm) 반환
   //return 25;
 }
 
-/*----------------------------------- [수면 모드] 동작 함수 */
+/*-------------------------------------------------------------------------------------- [수면 모드] 동작 함수 */
 void sleepModeWorking(){
     static short save_fan_speed = fanSpeed;
     sendAndroidMessage(1);
@@ -247,12 +250,12 @@ void sleepModeWorking(){
     MODE++;
 }
 
-/*----------------------------------- [센싱 모드] 동작 함수 */
+/*-------------------------------------------------------------------------------------- [센싱 모드] 동작 함수 */
 void sensingModeWorking(){
   
 }
 
-/*----------------------------------- [기상 모드] 동작 함수 */
+/*-------------------------------------------------------------------------------------- [기상 모드] 동작 함수 */
 void alarmWorking(){
     sendAndroidMessage(1);
     pixels.fill(pixels.Color(255, 255, 255), 0, NUM_PIXELS);
@@ -273,16 +276,29 @@ void alarmWorking(){
     MODE = WAIT_MODE;   // 대기 모드로 전환.
 }
 
-/*----------------------------------- 안드로이드 발신 메시지 설정 함수 */
+/*-------------------------------------------------------------------------------------- 안드로이드 발신 메시지 설정 함수 */
 void sendAndroidMessage(bool direct){     // 매개변수: 전송 주기 관계없이 비동기 송신(1)
     static int sendTime = 0;
+    static int h=0;
+    static long co2=0,d=0;
+    static float t=0;
     sendTime++;
     if(sendTime == SENDING_TICK*1000 || direct){
-      int h = dht.readHumidity();
-      float t = dht.readTemperature();
-      long co2 = Serial1.parseInt(); 
-      long d = getDistance();
-      int cds = analogRead(ILLUMINANCE_SENSOR);
+      h = dht.readHumidity();
+      t = dht.readTemperature();
+      
+      if(Serial1.available()){
+        long ccc = Serial1.parseInt();
+        if(ccc*10>300 && ccc*10 <100000)
+          co2 = ccc;
+      }
+      else
+        Serial.println("Co2 Sensor Error");
+
+      d = getDistance();
+
+      // https://www.allaboutcircuits.com/projects/design-a-luxmeter-using-a-light-dependent-resistor/
+      double v = 1250000*pow(analogRead(ILLUMINANCE_SENSOR),-1.4059);
       
       Serial2.print(h);Serial2.print(",");            // 온도 송신
       Serial2.print(t);Serial2.print(",");            // 습도 송신
@@ -290,11 +306,11 @@ void sendAndroidMessage(bool direct){     // 매개변수: 전송 주기 관계�
       Serial2.print(MODE);Serial2.print(",");         // 현재모드상태 송신
       Serial2.print(co2*10);Serial2.print(",");       // CO2 송신
       Serial2.print(d);Serial2.print(",");            // 거리 송신
-      Serial2.println(cds);                           // 조도 송신
+      Serial2.println((int)v);                           // 조도 송신
       sendTime = 0;
     }
 }
-/*----------------------------------- 안드로이드 실제 수신 메시지(RAW) 출력 */
+/*-------------------------------------------------------------------------------------- 안드로이드 실제 수신 메시지(RAW) 출력 */
 void rawMessage(){
   //parseAndroidMessage 와 동시사용 불가
   
@@ -307,7 +323,7 @@ void rawMessage(){
       Serial2.write(Serial.read());*/
 }
 
-/*----------------------------------- 안드로이드 수신 메시지 분석 함수 */
+/*-------------------------------------------------------------------------------------- 안드로이드 수신 메시지 분석 함수 */
 void parseAndroidMessage(){
   int readHead;
   if(Serial2.available())
@@ -435,7 +451,7 @@ void parseAndroidMessage(){
         Serial2.read();
   }
 }
-/*----------------------------------- 조명 제어 함수 */
+/*-------------------------------------------------------------------------------------- 조명 제어 함수 */
 void moodLedControl(int r,int g,int b){
     _printf("LED RGBW(%d,%d,%d,밝기:%d)\n",r,g,b,brightness);
     if(brightness !=0)
@@ -443,7 +459,7 @@ void moodLedControl(int r,int g,int b){
     pixels.fill(pixels.Color(r, g, b), 0, NUM_PIXELS);
     pixels.show();
 }
-/*----------------------------------- 모듈 제어 함수 */
+/*-------------------------------------------------------------------------------------- 모듈 제어 함수 */
 void VELVE(bool in,bool android){
   if(in == ON){
     Serial.println("Velve ON");
@@ -482,19 +498,58 @@ void HEAT(bool in,bool android){
   else if(!android && !in){
     Serial2.print("h");Serial2.println(",0");}
 }
-/*----------------------------------- 물리 버튼 제어 함수 */
+/*-------------------------------------------------------------------------------------- 물리 터치 버튼 제어 함수 */
 void keyInterrupt(){
-  if(digitalRead(PREV_BT) == HIGH){
-    _printf("물리버튼 제어 : Prev\n");
+  int prevCurrentState, nextCurrentState;
+  prevCurrentState = digitalRead(PREV_BT);
+  nextCurrentState = digitalRead(NEXT_BT);
+
+  if(prevLastState == LOW && prevCurrentState == HIGH){
+    _printf("Key Interrupt!! : Prev\n");
+    
+     if(modeBackEnable)
+       MODE--;
+    else
+       Serial.println("이전 모드로 이동 불가");
+       
     pinMode(VIBE,HIGH);
   }
-  if(digitalRead(NEXT_BT) == HIGH){
-    _printf("물리버튼 제어 : Next\n");
-     pinMode(VIBE,HIGH);
+  else if(prevLastState == HIGH && prevCurrentState == LOW){}
+
+  
+  if(nextLastState == LOW && nextCurrentState == HIGH){
+    _printf("Key Interrupt!! : Next\n");
+
+    if(!modeNextEnable)
+      Serial.println("다음 모드로 이동 불가");
+    else{
+      MODE++;
+      sendAndroidMessage(1);
+    }
+    pinMode(VIBE,HIGH);
+    
   }
+  else if(nextLastState == HIGH && nextCurrentState == LOW){}
+
+  prevLastState = prevCurrentState;
+  nextLastState = nextCurrentState;
 }
 
-/*----------------------------------- 로그 출력용 함수 */
+/*-------------------------------------------------------------------------------------- RTC 모듈 예외처리 */
+bool rtcAvailable(){
+  bool ret_value = true;
+  if(!rtc.begin()){
+    ret_value = false;
+    Serial.println("RTC Error : The RTC module is not available");
+  }
+  if(rtc.lostPower()){
+    ret_value = false;
+    Serial.println("RTC Error : The RTC module losts power");
+  }
+  return ret_value;
+}
+
+/*-------------------------------------------------------------------------------------- 로그 출력용 함수 */
 void printLog(bool direct){
   static int printTime = 0;
   if((printTime++)==2000 || direct){
@@ -506,16 +561,21 @@ void printLog(bool direct){
           case SENS_MODE:Serial.print(" 현재 상태 : 센싱 모드 ");break;
           case WAKE_MODE:Serial.print(" 현재 상태 : 기상 모드 ");break;
       }
+      
       if(BluetoothOn)Serial.print(" (안드로이드와 통신 ON) ");
-      DateTime now = rtc.now();
-      if(SetAlramOn){
-         Serial.print("  현재 시각 (알람설정됨) :");
-         Serial.print(now.month()); Serial.print("월");
-         Serial.print(now.day()); Serial.print("일");
-         Serial.print(now.hour()); Serial.print("시");
-         Serial.print(now.minute()); Serial.print("분");
-         Serial.print(now.second()); Serial.print("초");
+      
+      if(rtcAvailable()){
+        DateTime now = rtc.now();
+        if(SetAlramOn){
+           Serial.print("  현재 시각 (알람설정됨) :");
+           Serial.print(now.month()); Serial.print("월");
+           Serial.print(now.day()); Serial.print("일");
+           Serial.print(now.hour()); Serial.print("시");
+           Serial.print(now.minute()); Serial.print("분");
+           Serial.print(now.second()); Serial.print("초");
+        }
       }
+      
       Serial.println("");
       printTime = 0;
   }
