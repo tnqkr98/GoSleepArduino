@@ -15,7 +15,7 @@
 #define DIST_UPPER       30     // 거리 최대
 #define NUM_PIXELS        4     // 네오픽셀 LED 개수 
 
-enum{MOTOR_L=2,MOTOR_S=3,CO2VELVE=22,LED_PIN=26,NEXT_BT=30,PREV_BT=28,MOOD=24,VIBE=32,SPEAKER=34};  // 핀 번호
+enum{MOTOR_L=2,MOTOR_S=3,CO2VELVE=22,LED_PIN=26,NEXT_BT=28,PREV_BT=30,MOOD=24,VIBE=32,SPEAKER=34};  // 핀 번호
 enum{STOP_MODE=1,WAIT_MODE,DIST_MODE,SLEEP_MODE,SENS_MODE,WAKE_MODE};
 
 DHT dht(DHTPIN, DHT11);
@@ -193,11 +193,11 @@ void sleepModeWorking(){
     static short save_fan_speed = fanSpeed;
     sendAndroidMessage(1);
     printLog(1);
-    pixels.fill(pixels.Color(0, 0, 0), 0, NUM_PIXELS);        // 일단 불을 끔
+    pixels.fill(pixels.Color(0, 0, 0), 0, NUM_PIXELS);        // 불을 끔
     pixels.show();
 
-    for(int i=0;i<25;i++){  // 수면 시나리오
-        if(i==0)FAN(ON,false);
+    int m = 600; //0.1초 X 600 = 1분
+    for(int i=0;i<25;i++){  // 수면 시나리오    0.1초에 한번 루프 돌게.  25*m
         if(i==5)VELVE(ON,false);
         if(i==20)VELVE(OFF,false);
 
@@ -244,7 +244,8 @@ void sleepModeWorking(){
             }
           }
         }
-        
+
+        //delay(100);   // 실 수행시 설정.
         delay(1*500); // 1000 * 60 을 넣으면 분단위 수행 ( 비동기 종료를 위해선 이걸 쓰면안됨)
     }
     MODE++;
@@ -266,6 +267,7 @@ void alarmWorking(){
     for(int i=1;i<=15;i++){            // 정확히는 기상 15분전에 동작시작
        fanSpeed+=17;
        if(fanSpeed > 256) fanSpeed = 255; // 최대치로
+       analogWrite(MOTOR_S, fanSpeed); 
        _printf("기상 모드 %d 분: LED 밝기 증가 , FAN 속도 증가(%3d)\n",i,fanSpeed);
         pixels.fill(pixels.Color(255, 255, 255), 0, NUM_PIXELS); 
         pixels.setBrightness(i*17);
@@ -306,7 +308,7 @@ void sendAndroidMessage(bool direct){     // 매개변수: 전송 주기 관계�
       Serial2.print(MODE);Serial2.print(",");         // 현재모드상태 송신
       Serial2.print(co2*10);Serial2.print(",");       // CO2 송신
       Serial2.print(d);Serial2.print(",");            // 거리 송신
-      Serial2.println((int)v);                           // 조도 송신
+      Serial2.println((int)v);                        // 조도 송신
       sendTime = 0;
     }
 }
@@ -506,17 +508,17 @@ void keyInterrupt(){
 
   if(prevLastState == LOW && prevCurrentState == HIGH){
     _printf("Key Interrupt!! : Prev\n");
-    
+     digitalWrite(VIBE,HIGH);
+     delay(150);
+     digitalWrite(VIBE,LOW);
+
      if(modeBackEnable)
        MODE--;
     else
        Serial.println("이전 모드로 이동 불가");
-       
-    pinMode(VIBE,HIGH);
   }
   else if(prevLastState == HIGH && prevCurrentState == LOW){}
 
-  
   if(nextLastState == LOW && nextCurrentState == HIGH){
     _printf("Key Interrupt!! : Next\n");
 
@@ -526,8 +528,9 @@ void keyInterrupt(){
       MODE++;
       sendAndroidMessage(1);
     }
-    pinMode(VIBE,HIGH);
-    
+     digitalWrite(VIBE,HIGH);
+     delay(150);
+     digitalWrite(VIBE,LOW);
   }
   else if(nextLastState == HIGH && nextCurrentState == LOW){}
 
