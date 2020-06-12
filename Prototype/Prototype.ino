@@ -281,14 +281,21 @@ void alarmWorking(){
 /*-------------------------------------------------------------------------------------- 안드로이드 발신 메시지 설정 함수 */
 void sendAndroidMessage(bool direct){     // 매개변수: 전송 주기 관계없이 비동기 송신(1)
     static int sendTime = 0;
-    static int h=0;
+    static int h1=0;
     static long co2=0,d=0;
-    static float t=0;
+    static float t1=0;
     sendTime++;
     if(sendTime == SENDING_TICK*1000 || direct){
+      int h,t;
       h = dht.readHumidity();
       t = dht.readTemperature();
-      
+      if(isnan(h) || isnan(t))
+        Serial.println("Failed to read from DHT sensor!");
+      else{
+        h1 = h;
+        t1 = t;
+      }
+        
       if(Serial1.available()){
         long ccc = Serial1.parseInt();
         if(ccc*10>300 && ccc*10 <100000)
@@ -302,12 +309,12 @@ void sendAndroidMessage(bool direct){     // 매개변수: 전송 주기 관계�
       // https://www.allaboutcircuits.com/projects/design-a-luxmeter-using-a-light-dependent-resistor/
       double v = 1250000*pow(analogRead(ILLUMINANCE_SENSOR),-1.4059);
       
-      Serial2.print(h);Serial2.print(",");            // 온도 송신
-      Serial2.print(t);Serial2.print(",");            // 습도 송신
-      Serial2.print(fanSpeed);Serial2.print(",");     // 팬속도 송신
-      Serial2.print(MODE);Serial2.print(",");         // 현재모드상태 송신
-      Serial2.print(co2*10);Serial2.print(",");       // CO2 송신
-      Serial2.print(d);Serial2.print(",");            // 거리 송신
+      Serial2.print(h1);Serial2.print(",");            // 온도 송신
+      Serial2.print(t1);Serial2.print(",");            // 습도 송신     
+      Serial2.print(fanSpeed);Serial2.print(",");     // 팬속도 송신      
+      Serial2.print(MODE);Serial2.print(",");         // 현재모드상태 송신      
+      Serial2.print(co2*10);Serial2.print(",");       // CO2 송신      
+      Serial2.print(d);Serial2.print(",");            // 거리 송신     
       Serial2.println((int)v);                        // 조도 송신
       sendTime = 0;
     }
