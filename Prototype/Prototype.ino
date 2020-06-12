@@ -13,7 +13,7 @@
 #define SENDING_TICK      1     // n초에 한번씩 안드로이드로 센싱값 전송
 #define DIST_LOWER       20     // 거리 최소
 #define DIST_UPPER       30     // 거리 최대
-#define NUM_PIXELS        4     // 네오픽셀 LED 개수 
+#define NUM_PIXELS        8     // 네오픽셀 LED 개수 
 
 enum{MOTOR_L=2,MOTOR_S=3,CO2VELVE=22,LED_PIN=26,NEXT_BT=28,PREV_BT=30,MOOD=24,VIBE=32,SPEAKER=34};  // 핀 번호
 enum{STOP_MODE=1,WAIT_MODE,DIST_MODE,SLEEP_MODE,SENS_MODE,WAKE_MODE};
@@ -166,13 +166,13 @@ bool distanceCheck(){   // 거리 측정 해서 적정 거리 시, true 반환
       logcount = 0;
     }
     if(dist < DIST_LOWER){  // 가깝
-      pixels.setPixelColor(0, pixels.Color(10, 0, 0));
+      pixels.setPixelColor(2, pixels.Color(50, 0, 0));
       ret = false;
     } else if((dist < DIST_UPPER )){ //적절
-      pixels.setPixelColor(0, pixels.Color(0, 10, 0));
+      pixels.setPixelColor(2, pixels.Color(0, 50, 0));
       ret = true;
     } else {  // 멈
-      pixels.setPixelColor(0, pixels.Color(0, 0, 10));
+      pixels.setPixelColor(2, pixels.Color(0, 0, 50));
       ret = false;
     }
     pixels.show();
