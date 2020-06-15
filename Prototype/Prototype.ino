@@ -132,8 +132,7 @@ void modeControl(){
     }
 
     if(MODE == SLEEP_MODE){
-        //sleepModeWorking();
-        sleepModeWorking2();
+        sleepModeWorking();
         modeNextEnable = false;
     }
     
@@ -193,66 +192,6 @@ int getDistance(){  // 적외선 모듈 이용, 거리(cm) 반환
 /*-------------------------------------------------------------------------------------- [수면 모드] 동작 함수 */
 void sleepModeWorking(){
     static short save_fan_speed = fanSpeed;
-    sendAndroidMessage(1);
-    printLog(1);
-    pixels.fill(pixels.Color(0, 0, 0), 0, NUM_PIXELS);        // 불을 끔
-    pixels.show();
-    
-    for(int i=0;i<25;i++){  // 수면 시나리오 
-        if(i==5)VELVE(ON,false);
-        if(i==20)VELVE(OFF,false);
-
-        _printf("수면 모드 %2d 분 : ",i+1);
-        if(i<5){
-          fanSpeed+=50;
-          if(fanSpeed > 256) fanSpeed = 255; // 최대치로
-          _printf("팬속도 증가 %d\n",fanSpeed);
-          analogWrite(MOTOR_S, fanSpeed);
-        }
-        else if(i<20)
-          Serial.println("수면 가스 분사");
-        else if(i<25){
-          fanSpeed-=50;
-          if(fanSpeed <0) fanSpeed = 0; // 최소치로
-          _printf("팬속도 감소 %d\n",fanSpeed);
-          analogWrite(MOTOR_S, fanSpeed);
-        }
-
-        if(i==24) FAN(OFF,false);
-        sendAndroidMessage(1);
-        parseAndroidMessage();          // Android 명령 처리
-        
-        if(MODE == SLEEP_MODE-1){      // 수면모드 강제 중단
-          VELVE(OFF,false); FAN(OFF,false);
-          fanSpeed = save_fan_speed;
-          return;
-        }
-        
-        if(MODE == SLEEP_MODE+1){      // 수면모드 일시 중단 
-          VELVE(OFF,false); FAN(OFF,false);
-          Serial.print("수면모드 일시중단 ");
-          for(int i=0;;i++){
-            if(i==25000){
-              Serial.print(">");
-              i=0;
-            }
-            parseAndroidMessage();          // Android 명령 처리
-            if(MODE >= SLEEP_MODE+2){
-                MODE = SLEEP_MODE;
-                Serial.println("");
-                VELVE(ON,false); FAN(ON,false);
-                break;
-            }
-          }
-        }
-
-        
-    }
-    MODE++;
-}
-
-void sleepModeWorking2(){
-    static short save_fan_speed = fanSpeed;
     long pastTime;
     sendAndroidMessage(1);
     printLog(1);
@@ -270,8 +209,8 @@ void sleepModeWorking2(){
         if(i==(INIT_WIND_TIME+CO2_WIND_TIME)*M)VELVE(OFF,false);
 
         if(i%10==0){    //수면모드 동작중 , 매 루프 수행해야 할 것들.
-          _printf("수면 모드 [%5d 초] 진행중 >> 현재 수행 동작 : ",i/10);
           sendAndroidMessage(1);
+          _printf("수면 모드 [%5d 초] 진행중 >> 현재 수행 동작 : ",i/10);
         }
           
         if(i<INIT_WIND_TIME*M && i%10==0){
@@ -302,16 +241,20 @@ void sleepModeWorking2(){
         if(MODE == SLEEP_MODE+1){      // 수면모드 일시 중단 
           VELVE(OFF,false); FAN(OFF,false);
           Serial.print("수면모드 일시중단 ");
-          for(int i=0;;i++){
-            if(i==25000){
+          for(int j=0;;j++){
+            if(j==25000){
               Serial.print(">");
-              i=0;
+              j=0;
             }
             parseAndroidMessage();          // Android 명령 처리
-            if(MODE >= SLEEP_MODE+2){
+            
+            if(MODE >= SLEEP_MODE+2){   // 수면모드 일시 중단 탈출.
                 MODE = SLEEP_MODE;
                 Serial.println("");
-                VELVE(ON,false); FAN(ON,false);
+                if(INIT_WIND_TIME*M > i || (SLEEP_MODE_TOTAL-FIN_WIWN_TIME)*M <i)
+                  FAN(ON,false);
+                if(INIT_WIND_TIME*M <= i && (SLEEP_MODE_TOTAL-FIN_WIWN_TIME)*M >=i)
+                  VELVE(ON,false); 
                 break;
             }
           }
@@ -557,7 +500,7 @@ void VELVE(bool in,bool android){
 }
 void FAN(bool in,bool android){
   if(in == ON){
-    Serial.println("Fan ON");_printf("Fan ON, Fan Speed : %d\n",fanSpeed);
+    Serial.println("Fan ON");
     digitalWrite(MOTOR_L, HIGH);  
     analogWrite(MOTOR_S, fanSpeed);   
   }
