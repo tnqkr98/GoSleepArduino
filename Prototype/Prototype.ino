@@ -15,6 +15,8 @@
 #define DIST_UPPER       30     // 거리 최대
 #define NUM_PIXELS        8     // 네오픽셀 LED 개수 
 
+#define SLEEP_MODE_TOTAL 25     // 수면모드 진행시간(25분)
+
 enum{MOTOR_L=2,MOTOR_S=3,CO2VELVE=22,LED_PIN=26,NEXT_BT=28,PREV_BT=30,MOOD=24,VIBE=32,SPEAKER=34};  // 핀 번호
 enum{STOP_MODE=1,WAIT_MODE,DIST_MODE,SLEEP_MODE,SENS_MODE,WAKE_MODE};
 
@@ -91,7 +93,6 @@ void setup(){
 }
 
 void loop(){
-  //Serial.println(1);
   if(SetAlramOn){
     if(rtcAvailable()){
       DateTime now = rtc.now();
@@ -102,12 +103,9 @@ void loop(){
     }
   }
   //rawMessage();
-  //Serial.println(2);
   parseAndroidMessage();      // android 명령 처리
   keyInterrupt();           // key button 명령 처리
-  //Serial.println(3);
   sendAndroidMessage(0);
-  //Serial.println(4);
   printLog(0);
   modeControl();
 
@@ -195,9 +193,8 @@ void sleepModeWorking(){
     printLog(1);
     pixels.fill(pixels.Color(0, 0, 0), 0, NUM_PIXELS);        // 불을 끔
     pixels.show();
-
-    int m = 600; //0.1초 X 600 = 1분
-    for(int i=0;i<25;i++){  // 수면 시나리오    0.1초에 한번 루프 돌게.  25*m
+    
+    for(int i=0;i<25;i++){  // 수면 시나리오 
         if(i==5)VELVE(ON,false);
         if(i==20)VELVE(OFF,false);
 
@@ -245,8 +242,77 @@ void sleepModeWorking(){
           }
         }
 
-        //delay(100);   // 실 수행시 설정.
-        delay(1*500); // 1000 * 60 을 넣으면 분단위 수행 ( 비동기 종료를 위해선 이걸 쓰면안됨)
+        
+    }
+    MODE++;
+}
+
+void sleepModeWorking2(){
+    static short save_fan_speed = fanSpeed;
+    long pastTime;
+    sendAndroidMessage(1);
+    printLog(1);
+    pixels.fill(pixels.Color(0, 0, 0), 0, NUM_PIXELS);        // 불을 끔
+    pixels.show();
+
+    fanSpeed = 0;
+    
+    int M = 600; //0.1초 X 600 = 1분
+    for(unsigned int i=0;i<25*M;i++){  // 수면 시나리오    0.1초에 한번 루프 돌게.  25*M
+      pastTime = millis();
+      
+        if(i==5*M)VELVE(ON,false);
+        if(i==20*M)VELVE(OFF,false);
+
+        if(i%10==0)
+          _printf("수면 모드 %5d 초 : ",i%10);
+          
+        if(i<5*M && i%10){
+            fanSpeed = map(i%10,0,60*5,0,255);    //속도 조절은 1초 단위. (즉 10루프당 1회 속도조절)
+            _printf("팬속도 증가 %3d\n",fanSpeed);
+            analogWrite(MOTOR_S, fanSpeed);
+        }
+        else if(i<20*M){
+          if(i%10==0)
+            Serial.println("수면 가스 분사");
+        }//------------------------------------------이하 설정 안함 코딩 계속 할것.
+        else if(i<25*M){
+          fanSpeed-=50;
+          if(fanSpeed <0) fanSpeed = 0; // 최소치로
+          _printf("팬속도 감소 %d\n",fanSpeed);
+          analogWrite(MOTOR_S, fanSpeed);
+        }
+
+        if(i==24*M - 1) FAN(OFF,false);
+        sendAndroidMessage(1);
+        parseAndroidMessage();          // Android 명령 처리
+        
+        if(MODE == SLEEP_MODE-1){      // 수면모드 강제 중단
+          VELVE(OFF,false); FAN(OFF,false);
+          fanSpeed = save_fan_speed;
+          return;
+        }
+        
+        if(MODE == SLEEP_MODE+1){      // 수면모드 일시 중단 
+          VELVE(OFF,false); FAN(OFF,false);
+          Serial.print("수면모드 일시중단 ");
+          for(int i=0;;i++){
+            if(i==25000){
+              Serial.print(">");
+              i=0;
+            }
+            parseAndroidMessage();          // Android 명령 처리
+            if(MODE >= SLEEP_MODE+2){
+                MODE = SLEEP_MODE;
+                Serial.println("");
+                VELVE(ON,false); FAN(ON,false);
+                break;
+            }
+          }
+        }
+
+        while(millis() - pastTime < 100)  // 루프주기 0.1초
+          delay(1); 
     }
     MODE++;
 }
@@ -552,10 +618,10 @@ bool rtcAvailable(){
     ret_value = false;
     Serial.println("RTC Error : The RTC module is not available");
   }
-  if(rtc.lostPower()){
+  /*if(rtc.lostPower()){  //이상함
     ret_value = false;
     Serial.println("RTC Error : The RTC module losts power");
-  }
+  }*/
   return ret_value;
 }
 
