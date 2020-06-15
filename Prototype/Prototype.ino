@@ -15,7 +15,10 @@
 #define DIST_UPPER       30     // 거리 최대
 #define NUM_PIXELS        8     // 네오픽셀 LED 개수 
 
-#define SLEEP_MODE_TOTAL 25     // 수면모드 진행시간(25분)
+#define SLEEP_MODE_TOTAL  5     // 수면모드 진행시간(A분 = B+C+D  수식에 맞게 설정할것)  defalut : 25 분
+#define INIT_WIND_TIME    2     // 초기 B분간 팬속도 증가  defalut : 5 분
+#define CO2_WIND_TIME     1     // C분간 Co2 분 사       defalut : 15 분
+#define FIN_WIWN_TIME     2     // D분간 팬속도 감소      defalut :  5 분
 
 enum{MOTOR_L=2,MOTOR_S=3,CO2VELVE=22,LED_PIN=26,NEXT_BT=28,PREV_BT=30,MOOD=24,VIBE=32,SPEAKER=34};  // 핀 번호
 enum{STOP_MODE=1,WAIT_MODE,DIST_MODE,SLEEP_MODE,SENS_MODE,WAKE_MODE};
@@ -114,7 +117,7 @@ void loop(){
     bluetoothCount = 0;
     BluetoothOn = false;
   }
-  delay(1);
+  delay(1);   // 시간 처리 방식 변경 예정.
 }
 /*-------------------------------------------------------------------------------------- 각종 모드 제어 함수 */
 void modeControl(){
@@ -129,7 +132,8 @@ void modeControl(){
     }
 
     if(MODE == SLEEP_MODE){
-        sleepModeWorking();
+        //sleepModeWorking();
+        sleepModeWorking2();
         modeNextEnable = false;
     }
     
@@ -255,36 +259,38 @@ void sleepModeWorking2(){
     pixels.fill(pixels.Color(0, 0, 0), 0, NUM_PIXELS);        // 불을 끔
     pixels.show();
 
-    fanSpeed = 0;
+    fanSpeed = 0;   // save_fan_speed 를 사용자가 설정한 속도로 쓸것.
+    FAN(ON,false);
     
     int M = 600; //0.1초 X 600 = 1분
-    for(unsigned int i=0;i<25*M;i++){  // 수면 시나리오    0.1초에 한번 루프 돌게.  25*M
+    for(unsigned int i=0;i<SLEEP_MODE_TOTAL*M;i++){  // 수면 시나리오    0.1초에 한번 루프 돌게.  25*M
       pastTime = millis();
       
-        if(i==5*M)VELVE(ON,false);
-        if(i==20*M)VELVE(OFF,false);
+        if(i==INIT_WIND_TIME*M)VELVE(ON,false);
+        if(i==(INIT_WIND_TIME+CO2_WIND_TIME)*M)VELVE(OFF,false);
 
-        if(i%10==0)
-          _printf("수면 모드 %5d 초 : ",i%10);
+        if(i%10==0){    //수면모드 동작중 , 매 루프 수행해야 할 것들.
+          _printf("수면 모드 [%5d 초] 진행중 >> 현재 수행 동작 : ",i/10);
+          sendAndroidMessage(1);
+        }
           
-        if(i<5*M && i%10){
-            fanSpeed = map(i%10,0,60*5,0,255);    //속도 조절은 1초 단위. (즉 10루프당 1회 속도조절)
-            _printf("팬속도 증가 %3d\n",fanSpeed);
+        if(i<INIT_WIND_TIME*M && i%10==0){
+            fanSpeed = map(i/10,0,60*INIT_WIND_TIME,0,255);    //속도 조절은 1초 단위. (즉 10루프당 1회 속도조절)  여기서 255가 사용자가 설정한 값이여야.
+            _printf("팬속도 증가 [속도 값 %3d]\n",fanSpeed);
             analogWrite(MOTOR_S, fanSpeed);
         }
-        else if(i<20*M){
+        else if(i<(INIT_WIND_TIME+CO2_WIND_TIME)*M){
           if(i%10==0)
-            Serial.println("수면 가스 분사");
-        }//------------------------------------------이하 설정 안함 코딩 계속 할것.
-        else if(i<25*M){
-          fanSpeed-=50;
-          if(fanSpeed <0) fanSpeed = 0; // 최소치로
-          _printf("팬속도 감소 %d\n",fanSpeed);
+            Serial.println("수면 가스 분사 중..");
+        }
+        else if(i<SLEEP_MODE_TOTAL*M && i%10 == 0){
+          fanSpeed = map(i/10,60*(INIT_WIND_TIME+CO2_WIND_TIME),60*SLEEP_MODE_TOTAL,255,0);
+          _printf("팬속도 감소 [속도 값 %3d]\n",fanSpeed);
           analogWrite(MOTOR_S, fanSpeed);
         }
 
-        if(i==24*M - 1) FAN(OFF,false);
-        sendAndroidMessage(1);
+        if(i==SLEEP_MODE_TOTAL*M - 1) FAN(OFF,false);
+
         parseAndroidMessage();          // Android 명령 처리
         
         if(MODE == SLEEP_MODE-1){      // 수면모드 강제 중단
@@ -347,12 +353,12 @@ void alarmWorking(){
 /*-------------------------------------------------------------------------------------- 안드로이드 발신 메시지 설정 함수 */
 void sendAndroidMessage(bool direct){     // 매개변수: 전송 주기 관계없이 비동기 송신(1)
     static int sendTime = 0;
-    static int h1=0;
+    static float h1=0;
     static long co2=0,d=0;
     static float t1=0;
     sendTime++;
     if(sendTime == SENDING_TICK*1000 || direct){
-      int h,t;
+      float h, t;
       h = dht.readHumidity();
       t = dht.readTemperature();
       if(isnan(h) || isnan(t))
@@ -367,8 +373,9 @@ void sendAndroidMessage(bool direct){     // 매개변수: 전송 주기 관계�
         if(ccc*10>300 && ccc*10 <100000)
           co2 = ccc;
       }
-      else
-        Serial.println("Co2 Sensor Error");
+      else{
+        //Serial.println("Co2 Sensor Error");
+      }
 
       d = getDistance();
 
