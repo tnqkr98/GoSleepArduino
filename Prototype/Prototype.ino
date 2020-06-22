@@ -20,7 +20,7 @@
 #define CO2_WIND_TIME     1     // C분간 Co2 분 사       defalut : 15 분
 #define FIN_WIWN_TIME     2     // D분간 팬속도 감소      defalut :  5 분
 
-enum{MOTOR_L=2,MOTOR_S=3,CO2VELVE=22,LED_PIN=26,NEXT_BT=28,PREV_BT=30,MOOD=24,VIBE=32,SPEAKER=34};  // 핀 번호
+enum{MOTOR_L=2,MOTOR_S=3,CO2VELVE=22,LED_PIN=26,NEXT_BT=30,PREV_BT=28,MOOD=24,VIBE=32,SPEAKER=34};  // 핀 번호
 enum{STOP_MODE=1,WAIT_MODE,DIST_MODE,SLEEP_MODE,SENS_MODE,WAKE_MODE};
 
 DHT dht(DHTPIN, DHT11);
@@ -28,11 +28,12 @@ RTC_DS3231 rtc;
 Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUM_PIXELS,LED_PIN, NEO_GRB + NEO_KHZ800);
 
 short MODE = 2, fanSpeed = 80, brightness = 128;
+short global_mood = 1;
 
 char c,buf2[2],buf3[3],buf_rgb[3][4];      // 각종 읽기 버퍼
 short time[4],t=0,bluetoothCount = 0;
 bool SetAlramOn = false, BluetoothOn = false;
-bool LED_MOOD_ON = false, LED_STATE_ON = false, prevLastState, nextLastState;
+bool LED_MOOD_ON = false, prevLastState, nextLastState, prevMode=2;
 bool ON = true, OFF = false;
 int modeNextEnable, modeBackEnable;
 
@@ -47,6 +48,7 @@ void sleepModeWorking();                  // [수면 모드] 동작 함수
 void sensingModeWorking();                // [센싱 모드] 동작 함수
 void alarmWorking();                      // [기상 모드] 동작 함수
 void keyInterrupt();                      // 물리 버튼 제어 함수
+void keyMoodLightControl();               // 물리 버튼 무드등 제어 함수
 void VELVE(bool in,bool android);         // 이하 모듈 제어(ON/OFF), 두번째 매개변수 false: 비동기 송신
 void FAN(bool in,bool android);
 void HEAT(bool in,bool android);
@@ -107,7 +109,9 @@ void loop(){
   }
   //rawMessage();
   parseAndroidMessage();      // android 명령 처리
-  keyInterrupt();           // key button 명령 처리
+  //keyInterrupt();             // key button 명령 처리
+  keyInterrupt2();
+
   sendAndroidMessage(0);
   printLog(0);
   modeControl();
@@ -124,6 +128,11 @@ void modeControl(){
     if(MODE == WAIT_MODE){
        modeNextEnable = true;
        modeBackEnable = false;
+       if(prevMode == DIST_MODE){
+           //pixels.fill(pixels.Color(0, 0, 0), 0, NUM_PIXELS);
+           //pixels.setBrightness(0);
+           //pixels.show();
+       }
     }
 
     if(MODE == DIST_MODE){
@@ -147,6 +156,8 @@ void modeControl(){
         modeNextEnable = true;
         modeBackEnable = true;
     }
+
+    prevMode = MODE;
 }
 /*-------------------------------------------------------------------------------------- [거리 측정 모드] 동작 함수 */
 bool distanceCheck(){   // 거리 측정 해서 적정 거리 시, true 반환
@@ -163,7 +174,7 @@ bool distanceCheck(){   // 거리 측정 해서 적정 거리 시, true 반환
     
     pixels.setBrightness(30);       // 거리조절모드 밝기
     if((logcount++) == 1000){
-      _printf("      ㄴ 대상과의 거리 : %d\n",dist);
+      _printf("      * 대상과의 거리 : %d\n",dist);
       logcount = 0;
     }
     if(dist < DIST_LOWER){  // 가깝
@@ -230,7 +241,8 @@ void sleepModeWorking(){
 
         if(i==SLEEP_MODE_TOTAL*M - 1) FAN(OFF,false);
 
-        parseAndroidMessage();          // Android 명령 처리
+        parseAndroidMessage();          // 명령 처리
+        keyInterrupt();
         
         if(MODE == SLEEP_MODE-1){      // 수면모드 강제 중단
           VELVE(OFF,false); FAN(OFF,false);
@@ -246,7 +258,8 @@ void sleepModeWorking(){
               Serial.print(">");
               j=0;
             }
-            parseAndroidMessage();          // Android 명령 처리
+            parseAndroidMessage();          // 명령 처리
+            keyInterrupt();
             
             if(MODE >= SLEEP_MODE+2){   // 수면모드 일시 중단 탈출.
                 MODE = SLEEP_MODE;
@@ -299,6 +312,7 @@ void sendAndroidMessage(bool direct){     // 매개변수: 전송 주기 관계�
     static float h1=0;
     static long co2=0,d=0;
     static float t1=0;
+
     sendTime++;
     if(sendTime == SENDING_TICK*1000 || direct){
       float h, t;
@@ -523,18 +537,41 @@ void HEAT(bool in,bool android){
   else if(!android && !in){
     Serial2.print("h");Serial2.println(",0");}
 }
+
+void VIBE_CALL(){
+    digitalWrite(VIBE,HIGH);
+    delay(100);
+    digitalWrite(VIBE,LOW);
+}
 /*-------------------------------------------------------------------------------------- 물리 터치 버튼 제어 함수 */
 void keyInterrupt(){
   int prevCurrentState, nextCurrentState;
+  long pastTime = millis();
   prevCurrentState = digitalRead(PREV_BT);
   nextCurrentState = digitalRead(NEXT_BT);
 
-  if(prevLastState == LOW && prevCurrentState == HIGH){
-    _printf("Key Interrupt!! : Prev\n");
-     digitalWrite(VIBE,HIGH);
-     delay(150);
-     digitalWrite(VIBE,LOW);
+  if(digitalRead(PREV_BT) == HIGH || digitalRead(NEXT_BT) == HIGH){
+   
+    while(millis()-pastTime <=150){
+        if( digitalRead(NEXT_BT) == HIGH && digitalRead(PREV_BT) == HIGH ) {
+           VIBE_CALL();
+           keyMoodLightControl();
+           delay(1000);
+           //prevLastState = prevCurrentState;
+           //nextLastState = nextCurrentState;
+           return;
+        }
+    }
+  }
 
+  // 이전 버튼 컨트롤
+  if(prevLastState == LOW && prevCurrentState == HIGH){
+     VIBE_CALL();
+     /*while(millis()-pastTime <=150)
+        if( digitalRead(NEXT_BT) == HIGH ) 
+            return;*/
+            
+    _printf("Key Interrupt!! : Prev\n");
      if(modeBackEnable)
        MODE--;
     else
@@ -542,8 +579,14 @@ void keyInterrupt(){
   }
   else if(prevLastState == HIGH && prevCurrentState == LOW){}
 
+
+  // 다음버튼 컨트롤
   if(nextLastState == LOW && nextCurrentState == HIGH){
-    _printf("Key Interrupt!! : Next\n");
+     VIBE_CALL();
+     /*while(millis()-pastTime <=150)
+        if( digitalRead(NEXT_BT) == HIGH ) 
+            return;*/
+     _printf("Key Interrupt!! : Next\n");
 
     if(!modeNextEnable)
       Serial.println("다음 모드로 이동 불가");
@@ -551,14 +594,40 @@ void keyInterrupt(){
       MODE++;
       sendAndroidMessage(1);
     }
-     digitalWrite(VIBE,HIGH);
-     delay(150);
-     digitalWrite(VIBE,LOW);
   }
   else if(nextLastState == HIGH && nextCurrentState == LOW){}
 
   prevLastState = prevCurrentState;
   nextLastState = nextCurrentState;
+}
+
+void keyInterrupt2(){
+  static long prev_stack = 0, next_stack = 0;
+  //long interrupTime = millis();
+  
+  if(digitalRead(PREV_BT) == HIGH){
+    prev_stack++;
+    if(prev_stack == 1500)
+    {
+      VIBE_CALL();
+    }
+  }
+  delay(1);
+}
+
+void keyMoodLightControl(){
+  pixels.fill(pixels.Color(255, 255, 255), 0, NUM_PIXELS);
+  if(LED_MOOD_ON){
+    LED_MOOD_ON = false;
+    Serial.println("무드등 off");
+    pixels.setBrightness(0);    
+  }
+  else{
+    LED_MOOD_ON = true;
+    Serial.println("무드등 on");
+    pixels.setBrightness(15);
+  }
+  pixels.show();  
 }
 
 /*-------------------------------------------------------------------------------------- RTC 모듈 예외처리 */
