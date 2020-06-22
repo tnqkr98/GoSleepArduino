@@ -47,7 +47,7 @@ bool distanceCheck();                     // [거리 측정 모드] 동작 함�
 void sleepModeWorking();                  // [수면 모드] 동작 함수
 void sensingModeWorking();                // [센싱 모드] 동작 함수
 void alarmWorking();                      // [기상 모드] 동작 함수
-void keyInterrupt();                      // 물리 버튼 제어 함수
+void keyInterrupt(int PUSH_TIMING);       // 물리 버튼 제어 함수(매개변수 : 전역루프에서는 300, 수면루프에서는 10 넣어야. 0.3초,1초 반응속도)
 void keyMoodLightControl();               // 물리 버튼 무드등 제어 함수
 void VELVE(bool in,bool android);         // 이하 모듈 제어(ON/OFF), 두번째 매개변수 false: 비동기 송신
 void FAN(bool in,bool android);
@@ -109,8 +109,7 @@ void loop(){
   }
   //rawMessage();
   parseAndroidMessage();      // android 명령 처리
-  //keyInterrupt();             // key button 명령 처리
-  keyInterrupt2();
+  keyInterrupt(300);          // key button 명령 처리
 
   sendAndroidMessage(0);
   printLog(0);
@@ -128,9 +127,9 @@ void modeControl(){
     if(MODE == WAIT_MODE){
        modeNextEnable = true;
        modeBackEnable = false;
-       if(prevMode == DIST_MODE){
+       if(!LED_MOOD_ON){
            pixels.setBrightness(0);
-           pixels.fill(pixels.Color(0, 0, 0), 0, NUM_PIXELS);
+           pixels.fill(pixels.Color(255, 255, 255), 0, NUM_PIXELS);
            pixels.show();
        }
     }
@@ -242,7 +241,7 @@ void sleepModeWorking(){
         if(i==SLEEP_MODE_TOTAL*M - 1) FAN(OFF,false);
 
         parseAndroidMessage();          // 명령 처리
-        keyInterrupt();
+        keyInterrupt(10);
         
         if(MODE == SLEEP_MODE-1){      // 수면모드 강제 중단
           VELVE(OFF,false); FAN(OFF,false);
@@ -254,12 +253,13 @@ void sleepModeWorking(){
           VELVE(OFF,false); FAN(OFF,false);
           Serial.print("수면모드 일시중단 ");
           for(int j=0;;j++){
-            if(j==25000){
+            delay(1);
+            if(j==1000){
               Serial.print(">");
               j=0;
             }
             parseAndroidMessage();          // 명령 처리
-            keyInterrupt();
+            keyInterrupt(300);
             
             if(MODE >= SLEEP_MODE+2){   // 수면모드 일시 중단 탈출.
                 MODE = SLEEP_MODE;
@@ -544,109 +544,50 @@ void VIBE_CALL(){
     digitalWrite(VIBE,LOW);
 }
 /*-------------------------------------------------------------------------------------- 물리 터치 버튼 제어 함수 */
-void keyInterrupt(){
-  int prevCurrentState, nextCurrentState;
-  long pastTime = millis();
-  prevCurrentState = digitalRead(PREV_BT);
-  nextCurrentState = digitalRead(NEXT_BT);
-
-  if(digitalRead(PREV_BT) == HIGH || digitalRead(NEXT_BT) == HIGH){
-   
-    while(millis()-pastTime <=150){
-        if( digitalRead(NEXT_BT) == HIGH && digitalRead(PREV_BT) == HIGH ) {
-           VIBE_CALL();
-           keyMoodLightControl();
-           delay(1000);
-           //prevLastState = prevCurrentState;
-           //nextLastState = nextCurrentState;
-           return;
-        }
-    }
-  }
-
-  // 이전 버튼 컨트롤
-  if(prevLastState == LOW && prevCurrentState == HIGH){
-     VIBE_CALL();
-     /*while(millis()-pastTime <=150)
-        if( digitalRead(NEXT_BT) == HIGH ) 
-            return;*/
-            
-    _printf("Key Interrupt!! : Prev\n");
-     if(modeBackEnable)
-       MODE--;
-    else
-       Serial.println("이전 모드로 이동 불가");
-  }
-  else if(prevLastState == HIGH && prevCurrentState == LOW){}
-
-
-  // 다음버튼 컨트롤
-  if(nextLastState == LOW && nextCurrentState == HIGH){
-     VIBE_CALL();
-     /*while(millis()-pastTime <=150)
-        if( digitalRead(NEXT_BT) == HIGH ) 
-            return;*/
-    if(!modeNextEnable)
-      Serial.println("다음 모드로 이동 불가");
-    else{
-      _printf("Key Interrupt!! : Next\n");
-      MODE++;
-      sendAndroidMessage(1);
-    }
-  }
-  else if(nextLastState == HIGH && nextCurrentState == LOW){}
-
-  prevLastState = prevCurrentState;
-  nextLastState = nextCurrentState;
-}
-
-void keyInterrupt2(){
+void keyInterrupt(int PUSH_TIMING){
   static long prev_stack = 0, next_stack = 0, mood_stack = 0;
-  int PUSH_TIMING = 300;
 
   // 이전 버튼
-  if(digitalRead(PREV_BT) == HIGH || digitalRead(NEXT_BT) == HIGH){
-    if(digitalRead(PREV_BT) == HIGH){
-      prev_stack++;
-      if(prev_stack == PUSH_TIMING){
-        VIBE_CALL();
-        _printf("Key Interrupt!! : Prev\n");
-        if(modeBackEnable) MODE--;
-        else Serial.println("이전 모드로 이동 불가");
+  if(digitalRead(PREV_BT) == HIGH){
+    prev_stack++;
+    if(prev_stack == PUSH_TIMING){
+      VIBE_CALL();
+      _printf("Key Interrupt!! : Prev\n");
+      if(modeBackEnable) MODE--;
+      else Serial.println("이전 모드로 이동 불가");
+    }
+  }else if(digitalRead(PREV_BT) == LOW)
+     prev_stack = 0;
+
+  // 다음 버튼
+  if(digitalRead(NEXT_BT) == HIGH){
+    next_stack++;
+    if(next_stack == PUSH_TIMING){
+      VIBE_CALL();
+       _printf("Key Interrupt!! : Next\n");
+      if(!modeNextEnable) Serial.println("다음 모드로 이동 불가");
+      else{
+        MODE++;
+        sendAndroidMessage(1);
       }
-    }else if(digitalRead(PREV_BT) == LOW)
-       prev_stack = 0;
-  
-    // 다음 버튼
-    if(digitalRead(NEXT_BT) == HIGH){
-      next_stack++;
-      if(next_stack == PUSH_TIMING){
-        VIBE_CALL();
-         _printf("Key Interrupt!! : Next\n");
-        if(!modeNextEnable) Serial.println("다음 모드로 이동 불가");
-        else{
-          MODE++;
-          sendAndroidMessage(1);
-        }
-      }
-    }else if(digitalRead(NEXT_BT) == LOW)
-       next_stack = 0;
-  
-    // 무드 버튼
-    if(digitalRead(NEXT_BT) == HIGH && digitalRead(PREV_BT) == HIGH){
-      next_stack = 0;
-      prev_stack = 0;
-      mood_stack++;
-      if(mood_stack == PUSH_TIMING){
-        _printf("Key Interrupt!! : Mood\n");
+    }
+  }else if(digitalRead(NEXT_BT) == LOW)
+     next_stack = 0;
+
+  // 무드 버튼
+  if(digitalRead(NEXT_BT) == HIGH && digitalRead(PREV_BT) == HIGH){
+    next_stack = 0;
+    prev_stack = 0;
+    mood_stack++;
+    if(mood_stack == PUSH_TIMING){
+      _printf("Key Interrupt!! : Mood\n");
+      if(MODE != DIST_MODE){ 
         VIBE_CALL();
         keyMoodLightControl();
       }
-    }else if(digitalRead(NEXT_BT) == LOW || digitalRead(PREV_BT) == LOW)
-       mood_stack = 0;
-
-    delay(1);
-  }
+    }
+  }else if(digitalRead(NEXT_BT) == LOW || digitalRead(PREV_BT) == LOW)
+     mood_stack = 0;
 }
 
 void keyMoodLightControl(){
