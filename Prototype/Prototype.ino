@@ -129,9 +129,9 @@ void modeControl(){
        modeNextEnable = true;
        modeBackEnable = false;
        if(prevMode == DIST_MODE){
-           //pixels.fill(pixels.Color(0, 0, 0), 0, NUM_PIXELS);
-           //pixels.setBrightness(0);
-           //pixels.show();
+           pixels.setBrightness(0);
+           pixels.fill(pixels.Color(0, 0, 0), 0, NUM_PIXELS);
+           pixels.show();
        }
     }
 
@@ -540,7 +540,7 @@ void HEAT(bool in,bool android){
 
 void VIBE_CALL(){
     digitalWrite(VIBE,HIGH);
-    delay(100);
+    delay(150);
     digitalWrite(VIBE,LOW);
 }
 /*-------------------------------------------------------------------------------------- 물리 터치 버튼 제어 함수 */
@@ -586,11 +586,10 @@ void keyInterrupt(){
      /*while(millis()-pastTime <=150)
         if( digitalRead(NEXT_BT) == HIGH ) 
             return;*/
-     _printf("Key Interrupt!! : Next\n");
-
     if(!modeNextEnable)
       Serial.println("다음 모드로 이동 불가");
     else{
+      _printf("Key Interrupt!! : Next\n");
       MODE++;
       sendAndroidMessage(1);
     }
@@ -602,21 +601,55 @@ void keyInterrupt(){
 }
 
 void keyInterrupt2(){
-  static long prev_stack = 0, next_stack = 0;
-  //long interrupTime = millis();
+  static long prev_stack = 0, next_stack = 0, mood_stack = 0;
+  int PUSH_TIMING = 300;
+
+  // 이전 버튼
+  if(digitalRead(PREV_BT) == HIGH || digitalRead(NEXT_BT) == HIGH){
+    if(digitalRead(PREV_BT) == HIGH){
+      prev_stack++;
+      if(prev_stack == PUSH_TIMING){
+        VIBE_CALL();
+        _printf("Key Interrupt!! : Prev\n");
+        if(modeBackEnable) MODE--;
+        else Serial.println("이전 모드로 이동 불가");
+      }
+    }else if(digitalRead(PREV_BT) == LOW)
+       prev_stack = 0;
   
-  if(digitalRead(PREV_BT) == HIGH){
-    prev_stack++;
-    if(prev_stack == 1500)
-    {
-      VIBE_CALL();
-    }
+    // 다음 버튼
+    if(digitalRead(NEXT_BT) == HIGH){
+      next_stack++;
+      if(next_stack == PUSH_TIMING){
+        VIBE_CALL();
+         _printf("Key Interrupt!! : Next\n");
+        if(!modeNextEnable) Serial.println("다음 모드로 이동 불가");
+        else{
+          MODE++;
+          sendAndroidMessage(1);
+        }
+      }
+    }else if(digitalRead(NEXT_BT) == LOW)
+       next_stack = 0;
+  
+    // 무드 버튼
+    if(digitalRead(NEXT_BT) == HIGH && digitalRead(PREV_BT) == HIGH){
+      next_stack = 0;
+      prev_stack = 0;
+      mood_stack++;
+      if(mood_stack == PUSH_TIMING){
+        _printf("Key Interrupt!! : Mood\n");
+        VIBE_CALL();
+        keyMoodLightControl();
+      }
+    }else if(digitalRead(NEXT_BT) == LOW || digitalRead(PREV_BT) == LOW)
+       mood_stack = 0;
+
+    delay(1);
   }
-  delay(1);
 }
 
 void keyMoodLightControl(){
-  pixels.fill(pixels.Color(255, 255, 255), 0, NUM_PIXELS);
   if(LED_MOOD_ON){
     LED_MOOD_ON = false;
     Serial.println("무드등 off");
@@ -627,6 +660,7 @@ void keyMoodLightControl(){
     Serial.println("무드등 on");
     pixels.setBrightness(15);
   }
+  pixels.fill(pixels.Color(255, 255, 255), 0, NUM_PIXELS);  // 네오 픽셀 적용순서 ( 밝기 -> Fill -> show )
   pixels.show();  
 }
 
