@@ -33,7 +33,7 @@ short global_mood = 1;
 char c,buf2[2],buf3[3],buf_rgb[3][4];      // 각종 읽기 버퍼
 short time[4],t=0,bluetoothCount = 0;
 bool SetAlramOn = false, BluetoothOn = false;
-bool LED_MOOD_ON = false, prevLastState, nextLastState, prevMode=2;
+bool LED_MOOD_ON = false;
 bool ON = true, OFF = false;
 int modeNextEnable, modeBackEnable;
 
@@ -155,8 +155,6 @@ void modeControl(){
         modeNextEnable = true;
         modeBackEnable = true;
     }
-
-    prevMode = MODE;
 }
 /*-------------------------------------------------------------------------------------- [거리 측정 모드] 동작 함수 */
 bool distanceCheck(){   // 거리 측정 해서 적정 거리 시, true 반환
@@ -264,7 +262,7 @@ void sleepModeWorking(){
             if(MODE >= SLEEP_MODE+2){   // 수면모드 일시 중단 탈출.
                 MODE = SLEEP_MODE;
                 Serial.println("");
-                if(INIT_WIND_TIME*M > i || (SLEEP_MODE_TOTAL-FIN_WIWN_TIME)*M <i)
+                if(INIT_WIND_TIME*M > i || (SLEEP_MODE_TOTAL-FIN_WIWN_TIME)*M <i) // 중단됐던 시나리오에 알맞게 동작.
                   FAN(ON,false);
                 if(INIT_WIND_TIME*M <= i && (SLEEP_MODE_TOTAL-FIN_WIWN_TIME)*M >=i)
                   VELVE(ON,false); 
