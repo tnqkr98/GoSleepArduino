@@ -20,7 +20,6 @@ void setup()
  
 void loop()
 {
- 
   watchConsole();
   get3231Date();
  

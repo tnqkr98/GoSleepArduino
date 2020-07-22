@@ -20,7 +20,7 @@
 #define CO2_WIND_TIME     1     // C분간 Co2 분 사       defalut : 15 분
 #define FIN_WIWN_TIME     2     // D분간 팬속도 감소      defalut :  5 분
 
-enum{MOTOR_L=2,MOTOR_S=3,CO2VELVE=22,LED_PIN=26,NEXT_BT=30,PREV_BT=28,MOOD=24,VIBE=32,SPEAKER=34};  // 핀 번호
+enum{MOTOR_L=2,MOTOR_S=3,CO2VELVE=10,CO2VELVE_S=8,LED_PIN=26,NEXT_BT=30,PREV_BT=28,MOOD=24,VIBE=32,SPEAKER=22};  // 핀 번호
 enum{STOP_MODE=1,WAIT_MODE,DIST_MODE,SLEEP_MODE,SENS_MODE,WAKE_MODE};
 
 DHT dht(DHTPIN, DHT11);
@@ -73,19 +73,20 @@ void setup(){
   Serial1.begin(9600);  // 시리얼 1 : CO2
   Serial2.begin(9600);  // 시리얼 2 : Bluetooth
 
-  pinMode(CO2VELVE, OUTPUT);  //OPEN
+  //pinMode(CO2VELVE, OUTPUT);  //OPEN
   pinMode(PREV_BT, INPUT);    //RED_BTN
   pinMode(NEXT_BT, INPUT);    //BLUE_BTN
   pinMode(VIBE,OUTPUT);       
   pinMode(SPEAKER, OUTPUT);   //SPEAKER_PIN
   pinMode(ILLUMINANCE_SENSOR, INPUT);
   
-  digitalWrite(CO2VELVE, HIGH);   //OPEN
+  //digitalWrite(CO2VELVE, HIGH);   //OPEN
   digitalWrite(PREV_BT, LOW);    //RED_BTN
   digitalWrite(NEXT_BT, LOW);    //BLUE_BTN
   digitalWrite(VIBE,LOW);
   
-  analogWrite(MOTOR_S, fanSpeed); //
+  analogWrite(MOTOR_S, fanSpeed); // 팬속도
+  analogWrite(CO2VELVE_S, 255);   // 비례제어 (임의값)
 
   #if defined (__AVR_ATtiny85__)
    if (F_CPU == 16000000) clock_prescale_set(clock_div_1);
@@ -328,9 +329,9 @@ void sendAndroidMessage(bool direct){     // 매개변수: 전송 주기 관계�
         if(ccc*10>300 && ccc*10 <100000)
           co2 = ccc;
       }
-      else{
-        //Serial.println("Co2 Sensor Error");
-      }
+      else
+        Serial.println("Co2 Sensor Error");
+      
 
       d = getDistance();
 
@@ -500,15 +501,18 @@ void moodLedControl(int r,int g,int b){
 void VELVE(bool in,bool android){
   if(in == ON){
     Serial.println("Velve ON");
-    digitalWrite(CO2VELVE, LOW);
+    digitalWrite(CO2VELVE, HIGH);
+    analogWrite(CO2VELVE_S, 255);   
   }
   else {
     Serial.println("Velve OFF");
-    digitalWrite(CO2VELVE, HIGH);   //밸브 잠금
+    digitalWrite(CO2VELVE, LOW);   //밸브 잠금
   }
 
-  if(!android && in){Serial2.print("v");Serial2.println(",1");}
-  else if(!android && !in){Serial2.print("v");Serial2.println(",0"); }
+  if(!android && in){
+    Serial2.print("v");Serial2.println(",1");}
+  else if(!android && !in){
+    Serial2.print("v");Serial2.println(",0"); }
 }
 void FAN(bool in,bool android){
   if(in == ON){
