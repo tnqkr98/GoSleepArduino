@@ -4,12 +4,13 @@
 #include <SoftwareSerial.h>
 #include <Wire.h>
 #include <Adafruit_NeoPixel.h>
+#include <EEPROM.h>
 
 #define DHTPIN              A0    // 온습도 아날로그
 #define INFRARED_SENSOR     A1    // 적외선 아날로그
 #define ILLUMINANCE_SENSOR  A2    // 조도 아날로그(CDS)
 
-#define BLUETOOTHWAITING  5     // n초 이상 안드로이드로 부터 ack 받지 못하면 연결 끊긴것(송수신 범위 벗어남)
+#define BLUETOOTHWAITING  5     // n초 이상 안드로이드로 부터 a 받지 못하면 연결 끊긴것(송수신 범위 벗어남)
 #define SENDING_TICK      1     // n초에 한번씩 안드로이드로 센싱값 전송
 #define DIST_LOWER       20     // 거리 최소
 #define DIST_UPPER       30     // 거리 최대
@@ -28,10 +29,11 @@ RTC_DS3231 rtc;
 Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUM_PIXELS,LED_PIN, NEO_GRB + NEO_KHZ800);
 
 short MODE = 2, fanSpeed = 80, brightness = 128;
-short global_mood = 1;
+short global_mood = 1, alarmType = 1;   // type = 1 : 40분 점진적 기상,   type = 2 : 즉각 기상 (70분미만 수면시)
 
 char c,buf2[2],buf3[3],buf_rgb[3][4];      // 각종 읽기 버퍼
-short time[4],t=0,bluetoothCount = 0;
+short bluetoothCount = 0;
+byte time[2]={0},t=0;
 bool SetAlramOn = false, BluetoothOn = false;
 bool LED_MOOD_ON = false;
 bool ON = true, OFF = false;
@@ -52,6 +54,7 @@ void keyMoodLightControl();               // 물리 버튼 무드등 제어 함�
 void VELVE(bool in,bool android);         // 이하 모듈 제어(ON/OFF), 두번째 매개변수 false: 비동기 송신
 void FAN(bool in,bool android);
 void HEAT(bool in,bool android);
+void setAlarmMemory(bool on);             // 알람 설정 및 알람 시각 메모리 영구저장.
 
 bool rtcAvailabe();                      // RTC 모듈 예외처리
 
@@ -92,22 +95,23 @@ void setup(){
    if (F_CPU == 16000000) clock_prescale_set(clock_div_1);
   #endif 
 
-  Serial.println("GoSleep ready");
   pixels.setBrightness(128);
   pixels.begin();
   pixels.show();
+  
+  byte address[3];
+  address[0] = EEPROM.read(0);
+  address[1] = EEPROM.read(1);
+  address[2] = EEPROM.read(2);
+  if(address[0] == 1){
+     SetAlramOn = true;
+     time[0] = address[1];
+     time[1] = address[2];
+  }
+  Serial.println("GoSleep is ready to explosion");
 }
 
 void loop(){
-  if(SetAlramOn){
-    if(rtcAvailable()){
-      DateTime now = rtc.now();
-        if(time[0] == now.month() && time[1] == now.day() && time[2] == now.hour() && time[3] == now.minute()){
-          SetAlramOn = false;
-          MODE = WAKE_MODE;
-        }
-    }
-  }
   //rawMessage();
   parseAndroidMessage();      // android 명령 처리
   keyInterrupt(300);          // key button 명령 처리
@@ -135,26 +139,74 @@ void modeControl(){
        }
     }
 
+    static long start = 0;
     if(MODE == DIST_MODE){
-        modeNextEnable = distanceCheck();
+        //modeNextEnable = distanceCheck();
+        modeNextEnable = false;
         modeBackEnable = true;
+        
+        if(distanceCheck() && start == 0)
+            start = millis();
+        else if(distanceCheck() && start != 0){     // 5초 동안 적정거리이면 자동으로 수면모드 전환
+            if(millis()-start >=5000)
+                MODE++;
+        }
+        else if(!distanceCheck())
+            start = 0;
     }
 
     if(MODE == SLEEP_MODE){
+        DateTime now = rtc.now();
+        byte sleep[2];
+        sleep[0] = now.hour();
+        sleep[1] = now.minute();
+        int sMin, aMin, totalSleepTime;
+        sMin = sleep[0]*60 + sleep[1];
+        aMin = time[0]*60 + time[1];
+        if(sMin > aMin)
+          totalSleepTime = 1440 - sMin + aMin;
+        else
+          totalSleepTime = aMin - sMin;
+
+        if(totalSleepTime > 70)
+          alarmType = 1;        // 점진적 기상 타입
+        else
+          alarmType = 2;        // 즉각 기상 타입
+      
         sleepModeWorking();
         modeNextEnable = false;
     }
     
     if(MODE == SENS_MODE){
         sensingModeWorking();
+        if(SetAlramOn){
+          if(rtcAvailable()){
+            DateTime now = rtc.now();
+            if(alarmType == 2 && time[0] == now.hour() && time[1] == now.minute() && now.second() == 0)
+              MODE = WAKE_MODE;       // 즉각 기상
+            if(alarmType == 1 && time[0] == now.hour() && time[1] == now.minute() && now.second() == 0)
+              MODE = WAKE_MODE;       // 점진적 기상
+          }
+        }
         modeNextEnable = true; // 일단
         //modeBackEnable = false;
     }
         
     if(MODE == WAKE_MODE){
-        alarmWorking();
         modeNextEnable = true;
         modeBackEnable = true;
+        
+        if(alarmType == 2){     // 즉각 기상
+           pixels.fill(pixels.Color(255, 255, 255), 0, NUM_PIXELS); 
+           pixels.setBrightness(255);
+           pixels.show();
+           FAN(ON,false);
+           fanSpeed = 255;
+           analogWrite(MOTOR_S, fanSpeed); 
+           
+        }
+        else     // 점진적 기상
+          alarmWorking();
     }
 }
 /*-------------------------------------------------------------------------------------- [거리 측정 모드] 동작 함수 */
@@ -242,9 +294,10 @@ void sleepModeWorking(){
         parseAndroidMessage();          // 명령 처리
         keyInterrupt(10);
         
-        if(MODE == SLEEP_MODE-1){      // 수면모드 강제 중단
+        if(MODE == SLEEP_MODE-1){       // 수면모드 강제 중단
           VELVE(OFF,false); FAN(OFF,false);
           fanSpeed = save_fan_speed;
+          MODE--;                       // 대기모드로
           return;
         }
         
@@ -400,16 +453,20 @@ void parseAndroidMessage(){
           if(Serial2.peek() == 'r'){
              _printf("From Android >> 알람 리셋\n");
              SetAlramOn = false;
+             EEPROM.write(0,0);
           }
           else{
-            for(int i=0;i<8;i++){
+            for(int i=0;i<4;i++){
               buf3[i%2]=Serial2.read();delay(10);
               if(i%2 == 1){
                 buf3[2] = '\0';
                 time[t++] = atoi(buf3);
               }
             }
-           _printf("From Android >> 알람 설정 시간 : %d월 %d일 %d시 %d분\n",time[0],time[1],time[2],time[3]);
+           _printf("From Android >> 알람 설정 시간 : %d시 %d분\n",time[0],time[1]);
+           EEPROM.write(0,1);
+           EEPROM.write(1,time[0]);
+           EEPROM.write(2,time[1]);
             t=0;
             SetAlramOn = true;
           }
@@ -473,12 +530,10 @@ void parseAndroidMessage(){
           BluetoothOn = false;
           break;
       case 'r':   // 끊겼다재연결시 아두이노 상태를 안드로이드에 동기화 하기위한 안드의 요청
-          if(SetAlramOn){
+          if(time[0]!=-1){
             Serial2.print("t,");
             Serial2.print(time[0]);Serial2.print(",");
-            Serial2.print(time[1]);Serial2.print(",");
-            Serial2.print(time[2]);Serial2.print(",");
-            Serial2.println(time[3]);
+            Serial2.println(time[1]);
           }
           else
             Serial2.println("t,n");
@@ -633,20 +688,9 @@ void printLog(bool direct){
           case SENS_MODE:Serial.print(" 현재 상태 : 센싱 모드 ");break;
           case WAKE_MODE:Serial.print(" 현재 상태 : 기상 모드 ");break;
       }
-      
-      if(BluetoothOn)Serial.print(" (안드로이드와 통신 ON) ");
-      
-      if(rtcAvailable()){
-        DateTime now = rtc.now();
-        if(SetAlramOn){
-           Serial.print("  현재 시각 (알람설정됨) :");
-           Serial.print(now.month()); Serial.print("월");
-           Serial.print(now.day()); Serial.print("일");
-           Serial.print(now.hour()); Serial.print("시");
-           Serial.print(now.minute()); Serial.print("분");
-           Serial.print(now.second()); Serial.print("초");
-        }
-      }
+      if(BluetoothOn)Serial.print("| 안드로이드와 통신 ON ");    
+      if(SetAlramOn)
+         _printf("| 저장된 알람 시간 :%d시 %d분",time[0],time[1]);
       
       Serial.println("");
       printTime = 0;
