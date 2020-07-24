@@ -182,9 +182,16 @@ void modeControl(){
         if(SetAlramOn){
           if(rtcAvailable()){
             DateTime now = rtc.now();
-            if(alarmType == 2 && time[0] == now.hour() && time[1] == now.minute() && now.second() == 0)
+
+            int alarmMin, nowMin;
+            alarmMin = time[0]*60 + time[1];
+            nowMin = now.hour()*60 + now.minute();
+            
+            if(alarmType == 2 && alarmMin == nowMin && now.second() == 0)
               MODE = WAKE_MODE;       // 즉각 기상
-            if(alarmType == 1 && time[0] == now.hour() && time[1] == now.minute() && now.second() == 0)
+
+            alarmMin = (alarmMin-40<0)?(alarmMin+1400):(alarmMin-40);
+            if(alarmType == 1 && alarmMin == nowMin && now.second() == 0)
               MODE = WAKE_MODE;       // 점진적 기상
           }
         }
@@ -203,7 +210,8 @@ void modeControl(){
            FAN(ON,false);
            fanSpeed = 255;
            analogWrite(MOTOR_S, fanSpeed); 
-           
+
+           /* ~~~~~~~~~~~~~ 알람 끄는 법 넣을 부분 ~~~~~~~~~~~~~~ */           
         }
         else     // 점진적 기상
           alarmWorking();
@@ -273,7 +281,7 @@ void sleepModeWorking(){
           sendAndroidMessage(1);
           _printf("수면 모드 [%5d 초] 진행중 >> 현재 수행 동작 : ",i/10);
         }
-          
+ 
         if(i<INIT_WIND_TIME*M && i%10==0){
             fanSpeed = map(i/10,0,60*INIT_WIND_TIME,0,255);    //속도 조절은 1초 단위. (즉 10루프당 1회 속도조절)  여기서 255가 사용자가 설정한 값이여야.
             _printf("팬속도 증가 [속도 값 %3d]\n",fanSpeed);
@@ -354,6 +362,8 @@ void alarmWorking(){
         pixels.show();
         delay(500);
     }
+    /* ~~~~~~~~~~~~~ 기상 모드 작동 종료 방법 넣어야함 ↑ ~~~~~~~~~~~~~~ */      
+
     FAN(OFF,false);
     MODE = WAIT_MODE;   // 대기 모드로 전환.
 }
