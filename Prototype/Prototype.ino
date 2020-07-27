@@ -17,12 +17,12 @@
 #define NUM_PIXELS       12     // 네오픽셀 LED 개수 
 
 #define SLEEP_MODE_TOTAL  3     // 수면모드 진행시간(A분 = B+C+D  수식에 맞게 설정할것)  defalut : 25 분
-#define INIT_WIND_TIME    1     // 초기 B분간 팬속도 증가  defalut : 5 분
-#define CO2_WIND_TIME     1     // C분간 Co2 분 사       defalut : 15 분
-#define FIN_WIWN_TIME     1     // D분간 팬속도 감소      defalut :  5 분
+#define INIT_WIND_TIME    1     // 초기 B분간 팬속도 증가  default : 5 분
+#define CO2_WIND_TIME     1     // C분간 Co2 분 사       default : 15 분
+#define FIN_WIWN_TIME     1     // D분간 팬속도 감소      default :  5 분
 
-#define ALARM_FAN_TIME    2     // 기상모드 팬 시작(-x분)
-#define ALARM_LED_TIME    1     // 기상모드 LED 시작(-y분)
+#define ALARM_FAN_TIME    2     // 기상모드 팬 시작(-x분)   default : 40분
+#define ALARM_LED_TIME    1     // 기상모드 LED 시작(-y분)  default : 15분
 #define LONG_SLEEP       70     // 알람방식의 전환 시간(70<수면시간 : 점진적기상, 70>수면시간 : 즉각기상)
 
 enum{MOTOR_L=2,MOTOR_S=3,CO2VELVE=10,CO2VELVE_S=8,LED_PIN=26,NEXT_BT=30,PREV_BT=28,MOOD=24,VIBE=32,SPEAKER=22};  // 핀 번호
@@ -172,10 +172,10 @@ void modeControl(){
         else
           totalSleepTime = aMin - sMin;
 
-        //if(totalSleepTime > 70)
+        if(totalSleepTime > LONG_SLEEP)
           alarmType = 1;        // 점진적 기상 타입
-        //else
-        //  alarmType = 2;        // 즉각 기상 타입
+        else
+          alarmType = 2;        // 즉각 기상 타입
       
         sleepModeWorking();
         modeNextEnable = false;
@@ -208,16 +208,17 @@ void modeControl(){
               alarmWorking();       // 점진적 기상
           }
         }
-        modeNextEnable = true; // 일단
-        //modeBackEnable = false;
+        modeNextEnable = true;
+        modeBackEnable = false;
     }
         
     if(MODE == WAKE_MODE){
         modeNextEnable = true;
         modeBackEnable = false;
-        if(MODE == WAKE_MODE)
-          MODE == WAIT_MODE;
     }
+
+    if(MODE > WAKE_MODE)
+        MODE = WAIT_MODE;
 }
 /*-------------------------------------------------------------------------------------- [거리 측정 모드] 동작 함수 */
 bool distanceCheck(){   // 거리 측정 해서 적정 거리 시, true 반환
@@ -367,7 +368,7 @@ void alarmWorking(){
         }
 
       if(i%10==0){
-        fanSpeed = map(i/10,0,ALARM_FAN_TIME*M,0,255);
+        fanSpeed = map(i/10,0,ALARM_FAN_TIME*60,0,255);
         Serial.print("FAN 동작 중");
       }
 
@@ -384,7 +385,7 @@ void alarmWorking(){
       }
 
       if(i%10==0 && i>ALARM_LED_TIME*M){
-        ledbright = map(i/10,ALARM_LED_TIME*M,ALARM_FAN_TIME*M,0,255);
+        ledbright = map(i/10,ALARM_LED_TIME*60,ALARM_FAN_TIME*60,0,255);
         pixels.fill(pixels.Color(255, 255, 255), 0, NUM_PIXELS); 
         pixels.setBrightness(ledbright);
         pixels.show(); 
@@ -399,21 +400,6 @@ void alarmWorking(){
     }
 
     MODE = WAKE_MODE;   // 최대출력인 상태로 기상 모드로 전환.
-    
-    /*FAN(ON,false);
-    for(int i=1;i<=15;i++){           
-       fanSpeed+=17;
-       if(fanSpeed > 256) fanSpeed = 255; // 최대치로
-       analogWrite(MOTOR_S, fanSpeed); 
-       _printf("기상 모드 %d 분: LED 밝기 증가 , FAN 속도 증가(%3d)\n",i,fanSpeed);
-        pixels.fill(pixels.Color(255, 255, 255), 0, NUM_PIXELS); 
-        pixels.setBrightness(i*17);
-        pixels.show();
-        delay(500);
-    }
-    FAN(OFF,false);*/
-    
-   // MODE = WAIT_MODE;   // 대기 모드로 전환.
 }
 
 /*-------------------------------------------------------------------------------------- 안드로이드 발신 메시지 설정 함수 */
@@ -668,7 +654,10 @@ void keyInterrupt(int PUSH_TIMING){
     if(prev_stack == PUSH_TIMING){
       VIBE_CALL();
       _printf("Key Interrupt!! : Prev\n");
-      if(modeBackEnable) MODE--;
+      if(modeBackEnable) {
+        MODE--;
+        prev_stack = 0;
+      }
       else Serial.println("이전 모드로 이동 불가");
     }
     //return 1;
@@ -686,6 +675,7 @@ void keyInterrupt(int PUSH_TIMING){
       else{
         MODE++;
         sendAndroidMessage(1);
+        next_stack = 0;
       }
       //return 1;
     }
