@@ -14,12 +14,16 @@
 #define SENDING_TICK      1     // n초에 한번씩 안드로이드로 센싱값 전송
 #define DIST_LOWER       20     // 거리 최소
 #define DIST_UPPER       30     // 거리 최대
-#define NUM_PIXELS        8     // 네오픽셀 LED 개수 
+#define NUM_PIXELS       12     // 네오픽셀 LED 개수 
 
-#define SLEEP_MODE_TOTAL  5     // 수면모드 진행시간(A분 = B+C+D  수식에 맞게 설정할것)  defalut : 25 분
-#define INIT_WIND_TIME    2     // 초기 B분간 팬속도 증가  defalut : 5 분
+#define SLEEP_MODE_TOTAL  3     // 수면모드 진행시간(A분 = B+C+D  수식에 맞게 설정할것)  defalut : 25 분
+#define INIT_WIND_TIME    1     // 초기 B분간 팬속도 증가  defalut : 5 분
 #define CO2_WIND_TIME     1     // C분간 Co2 분 사       defalut : 15 분
-#define FIN_WIWN_TIME     2     // D분간 팬속도 감소      defalut :  5 분
+#define FIN_WIWN_TIME     1     // D분간 팬속도 감소      defalut :  5 분
+
+#define ALARM_FAN_TIME    2     // 기상모드 팬 시작(-x분)
+#define ALARM_LED_TIME    1     // 기상모드 LED 시작(-y분)
+#define LONG_SLEEP       70     // 알람방식의 전환 시간(70<수면시간 : 점진적기상, 70>수면시간 : 즉각기상)
 
 enum{MOTOR_L=2,MOTOR_S=3,CO2VELVE=10,CO2VELVE_S=8,LED_PIN=26,NEXT_BT=30,PREV_BT=28,MOOD=24,VIBE=32,SPEAKER=22};  // 핀 번호
 enum{STOP_MODE=1,WAIT_MODE,DIST_MODE,SLEEP_MODE,SENS_MODE,WAKE_MODE};
@@ -168,10 +172,10 @@ void modeControl(){
         else
           totalSleepTime = aMin - sMin;
 
-        if(totalSleepTime > 70)
+        //if(totalSleepTime > 70)
           alarmType = 1;        // 점진적 기상 타입
-        else
-          alarmType = 2;        // 즉각 기상 타입
+        //else
+        //  alarmType = 2;        // 즉각 기상 타입
       
         sleepModeWorking();
         modeNextEnable = false;
@@ -186,13 +190,22 @@ void modeControl(){
             int alarmMin, nowMin;
             alarmMin = time[0]*60 + time[1];
             nowMin = now.hour()*60 + now.minute();
-            
-            if(alarmType == 2 && alarmMin == nowMin && now.second() == 0)
-              MODE = WAKE_MODE;       // 즉각 기상
 
-            alarmMin = (alarmMin-40<0)?(alarmMin+1400):(alarmMin-40);
+            if(alarmType == 2 && alarmMin == nowMin && now.second() == 0){
+              pixels.fill(pixels.Color(255, 255, 255), 0, NUM_PIXELS); 
+              pixels.setBrightness(255);
+              pixels.show();
+              FAN(ON,false);
+              fanSpeed = 255;
+              analogWrite(MOTOR_S, fanSpeed);     
+              MODE = WAKE_MODE;               // 즉각 기상
+            }
+
+            alarmMin = (alarmMin-ALARM_FAN_TIME<0)?(alarmMin+1400):(alarmMin-ALARM_FAN_TIME);
+            //_printf("nowMin : %d  , alarmMin : %d\n",nowMin,alarmMin);
+            
             if(alarmType == 1 && alarmMin == nowMin && now.second() == 0)
-              MODE = WAKE_MODE;       // 점진적 기상
+              alarmWorking();       // 점진적 기상
           }
         }
         modeNextEnable = true; // 일단
@@ -201,20 +214,9 @@ void modeControl(){
         
     if(MODE == WAKE_MODE){
         modeNextEnable = true;
-        modeBackEnable = true;
-        
-        if(alarmType == 2){     // 즉각 기상
-           pixels.fill(pixels.Color(255, 255, 255), 0, NUM_PIXELS); 
-           pixels.setBrightness(255);
-           pixels.show();
-           FAN(ON,false);
-           fanSpeed = 255;
-           analogWrite(MOTOR_S, fanSpeed); 
-
-           /* ~~~~~~~~~~~~~ 알람 끄는 법 넣을 부분 ~~~~~~~~~~~~~~ */           
-        }
-        else     // 점진적 기상
-          alarmWorking();
+        modeBackEnable = false;
+        if(MODE == WAKE_MODE)
+          MODE == WAIT_MODE;
     }
 }
 /*-------------------------------------------------------------------------------------- [거리 측정 모드] 동작 함수 */
@@ -347,12 +349,59 @@ void sensingModeWorking(){
 /*-------------------------------------------------------------------------------------- [기상 모드] 동작 함수 */
 void alarmWorking(){
     sendAndroidMessage(1);
+    int ledbright;
+    long pastTime;
+  
     pixels.fill(pixels.Color(255, 255, 255), 0, NUM_PIXELS);
     pixels.setBrightness(0);
     pixels.show();
 
+    int M = 600; //0.1초 X 600 = 1분
     FAN(ON,false);
-    for(int i=1;i<=15;i++){            // 정확히는 기상 15분전에 동작시작
+    for(int i=0;i<=ALARM_FAN_TIME*M;i++){
+      pastTime = millis();
+
+      if(i%10==0){    //수면모드 동작중 , 매 루프 수행해야 할 것들.
+          sendAndroidMessage(1);
+          _printf("기상 모드 [%5d 초] 진행중 >> 현재 상태 : ",i/10);
+        }
+
+      if(i%10==0){
+        fanSpeed = map(i/10,0,ALARM_FAN_TIME*M,0,255);
+        Serial.print("FAN 동작 중");
+      }
+
+      parseAndroidMessage();          // 명령 처리
+      keyInterrupt(10);
+
+      if(MODE == WAKE_MODE || MODE == SLEEP_MODE){    // 기상 동작(시스템상 아직 센싱모드) 중, 사용자가 다음,이전 누를 시
+          MODE = WAIT_MODE;                           // 즉 알람 종료.
+          FAN(OFF,false); 
+          pixels.fill(pixels.Color(255, 255, 255), 0, NUM_PIXELS);
+          pixels.setBrightness(0);
+          pixels.show();
+          return;
+      }
+
+      if(i%10==0 && i>ALARM_LED_TIME*M){
+        ledbright = map(i/10,ALARM_LED_TIME*M,ALARM_FAN_TIME*M,0,255);
+        pixels.fill(pixels.Color(255, 255, 255), 0, NUM_PIXELS); 
+        pixels.setBrightness(ledbright);
+        pixels.show(); 
+        _printf(" | LED 동작 중[밝기 : %5d]",ledbright);
+      }
+       
+      while(millis() - pastTime < 100)  // 루프주기 0.1초
+          delay(1);
+
+      if(i%10==0)
+        Serial.println("");
+    }
+
+    MODE = WAKE_MODE;   // 최대출력인 상태로 기상 모드로 전환.
+    
+    /*FAN(ON,false);
+    for(int i=1;i<=15;i++){           
        fanSpeed+=17;
        if(fanSpeed > 256) fanSpeed = 255; // 최대치로
        analogWrite(MOTOR_S, fanSpeed); 
@@ -362,10 +411,9 @@ void alarmWorking(){
         pixels.show();
         delay(500);
     }
-    /* ~~~~~~~~~~~~~ 기상 모드 작동 종료 방법 넣어야함 ↑ ~~~~~~~~~~~~~~ */      
-
-    FAN(OFF,false);
-    MODE = WAIT_MODE;   // 대기 모드로 전환.
+    FAN(OFF,false);*/
+    
+   // MODE = WAIT_MODE;   // 대기 모드로 전환.
 }
 
 /*-------------------------------------------------------------------------------------- 안드로이드 발신 메시지 설정 함수 */
@@ -623,7 +671,9 @@ void keyInterrupt(int PUSH_TIMING){
       if(modeBackEnable) MODE--;
       else Serial.println("이전 모드로 이동 불가");
     }
-  }else if(digitalRead(PREV_BT) == LOW)
+    //return 1;
+  }
+  else if(digitalRead(PREV_BT) == LOW)
      prev_stack = 0;
 
   // 다음 버튼
@@ -637,6 +687,7 @@ void keyInterrupt(int PUSH_TIMING){
         MODE++;
         sendAndroidMessage(1);
       }
+      //return 1;
     }
   }else if(digitalRead(NEXT_BT) == LOW)
      next_stack = 0;
@@ -653,8 +704,11 @@ void keyInterrupt(int PUSH_TIMING){
         keyMoodLightControl();
       }
     }
+    //return 1;
   }else if(digitalRead(NEXT_BT) == LOW || digitalRead(PREV_BT) == LOW)
      mood_stack = 0;
+
+  //return 0;
 }
 
 void keyMoodLightControl(){
