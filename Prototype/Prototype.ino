@@ -5,6 +5,8 @@
 #include <Wire.h>
 #include <Adafruit_NeoPixel.h>
 #include <EEPROM.h>
+#include <SPI.h>
+#include <MFRC522.h>
 
 #define DHTPIN              A0    // 온습도 아날로그
 #define INFRARED_SENSOR     A1    // 적외선 아날로그
@@ -26,11 +28,13 @@
 #define LONG_SLEEP       70     // 알람방식의 전환 시간(70<수면시간 : 점진적기상, 70>수면시간 : 즉각기상)
 
 enum{MOTOR_L=2,MOTOR_S=3,CO2VELVE=10,CO2VELVE_S=8,LED_PIN=26,NEXT_BT=30,PREV_BT=28,MOOD=24,VIBE=32,SPEAKER=22};  // 핀 번호
+enum{SS_PIN=53,RST_PIN=5};      // RFID(NFC관련) 핀번호
 enum{STOP_MODE=1,WAIT_MODE,DIST_MODE,SLEEP_MODE,SENS_MODE,WAKE_MODE};
 
 DHT dht(DHTPIN, DHT11);
 RTC_DS3231 rtc;
 Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUM_PIXELS,LED_PIN, NEO_GRB + NEO_KHZ800);
+MFRC522 mfrc522(SS_PIN, RST_PIN);
 
 short MODE = 2, fanSpeed = 80, brightness = 128;
 short global_mood = 1, alarmType = 1;   // type = 1 : 40분 점진적 기상,   type = 2 : 즉각 기상 (70분미만 수면시)
@@ -59,6 +63,7 @@ void VELVE(bool in,bool android);         // 이하 모듈 제어(ON/OFF), 두�
 void FAN(bool in,bool android);
 void HEAT(bool in,bool android);
 void setAlarmMemory(bool on);             // 알람 설정 및 알람 시각 메모리 영구저장.
+void readNFC();                           // RFID 이용한 NFC 리더
 
 bool rtcAvailabe();                      // RTC 모듈 예외처리
 
@@ -74,11 +79,14 @@ void _printf(const char *s, ...){
 }
 
 void setup(){
-  dht.begin();
-  Wire.begin();
   Serial.begin(9600);
   Serial1.begin(9600);  // 시리얼 1 : CO2
   Serial2.begin(9600);  // 시리얼 2 : Bluetooth
+  dht.begin();
+  Wire.begin();
+  
+  SPI.begin();          // RFID
+  mfrc522.PCD_Init();
 
   //pinMode(CO2VELVE, OUTPUT);  //OPEN
   pinMode(PREV_BT, INPUT);    //RED_BTN
@@ -728,6 +736,13 @@ bool rtcAvailable(){
     Serial.println("RTC Error : The RTC module losts power");
   }*/
   return ret_value;
+}
+
+/*-------------------------------------------------------------------------------------- NFC 리더 */
+void readNFC(){
+  MFRC522::MIFARE_Key key;
+  for (byte i = 0; i < 6; i++) key.keyByte[i] = 0xFF;
+  
 }
 
 /*-------------------------------------------------------------------------------------- 로그 출력용 함수 */
