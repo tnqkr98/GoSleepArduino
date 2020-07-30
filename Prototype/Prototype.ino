@@ -742,6 +742,10 @@ bool rtcAvailable(){
 void readNFC(){
   MFRC522::MIFARE_Key key;
   for (byte i = 0; i < 6; i++) key.keyByte[i] = 0xFF;
+
+  byte block;
+  byte len;
+  MFRC522::StatusCode status;
   
 }
 
