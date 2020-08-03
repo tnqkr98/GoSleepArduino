@@ -21,7 +21,7 @@
 #define SLEEP_MODE_TOTAL  3     // 수면모드 진행시간(A분 = B+C+D  수식에 맞게 설정할것)  defalut : 25 분
 #define INIT_WIND_TIME    1     // 초기 B분간 팬속도 증가  default : 5 분
 #define CO2_WIND_TIME     1     // C분간 Co2 분 사       default : 15 분
-#define FIN_WIWN_TIME     1     // D분간 팬속도 감소      default :  5 분
+#define FIN_WIND_TIME     1     // D분간 팬속도 감소      default :  5 분
 
 #define ALARM_FAN_TIME    2     // 기상모드 팬 시작(-x분)   default : 40분
 #define ALARM_LED_TIME    1     // 기상모드 LED 시작(-y분)  default : 15분
@@ -34,12 +34,12 @@ enum{STOP_MODE=1,WAIT_MODE,DIST_MODE,SLEEP_MODE,SENS_MODE,WAKE_MODE};
 DHT dht(DHTPIN, DHT11);
 RTC_DS3231 rtc;
 Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUM_PIXELS,LED_PIN, NEO_GRB + NEO_KHZ800);
-MFRC522 mfrc522(SS_PIN, RST_PIN);
+//MFRC522 mfrc522(SS_PIN, RST_PIN);
 
 short MODE = 2, fanSpeed = 80, brightness = 128;
 short global_mood = 1, alarmType = 1;   // type = 1 : 40분 점진적 기상,   type = 2 : 즉각 기상 (70분미만 수면시)
 
-char c,buf2[2],buf3[3],buf_rgb[3][4];      // 각종 읽기 버퍼
+char c,buf2[2],buf3[3],buf_rgb[3][4],co2code[36];      // 각종 읽기 버퍼
 short bluetoothCount = 0;
 byte time[2]={0},t=0;
 bool SetAlramOn = false, BluetoothOn = false;
@@ -86,7 +86,7 @@ void setup(){
   Wire.begin();
   
   SPI.begin();          // RFID
-  mfrc522.PCD_Init();
+  //mfrc522.PCD_Init();
 
   //pinMode(CO2VELVE, OUTPUT);  //OPEN
   pinMode(PREV_BT, INPUT);    //RED_BTN
@@ -124,12 +124,16 @@ void setup(){
 }
 
 void loop(){
+  
   //rawMessage();
   parseAndroidMessage();      // android 명령 처리
   keyInterrupt(300);          // key button 명령 처리
 
   sendAndroidMessage(0);
   printLog(0);
+
+  //if (mfrc522.PICC_IsNewCardPresent() && mfrc522.PICC_ReadCardSerial())
+  readNFC();
   modeControl();
 
   bluetoothCount++;
@@ -335,9 +339,9 @@ void sleepModeWorking(){
             if(MODE >= SLEEP_MODE+2){   // 수면모드 일시 중단 탈출.
                 MODE = SLEEP_MODE;
                 Serial.println("");
-                if(INIT_WIND_TIME*M > i || (SLEEP_MODE_TOTAL-FIN_WIWN_TIME)*M <i) // 중단됐던 시나리오에 알맞게 동작.
+                if(INIT_WIND_TIME*M > i || (SLEEP_MODE_TOTAL-FIN_WIND_TIME)*M <i) // 중단됐던 시나리오에 알맞게 동작.
                   FAN(ON,false);
-                if(INIT_WIND_TIME*M <= i && (SLEEP_MODE_TOTAL-FIN_WIWN_TIME)*M >=i)
+                if(INIT_WIND_TIME*M <= i && (SLEEP_MODE_TOTAL-FIN_WIND_TIME)*M >=i)
                   VELVE(ON,false); 
                 break;
             }
@@ -740,13 +744,57 @@ bool rtcAvailable(){
 
 /*-------------------------------------------------------------------------------------- NFC 리더 */
 void readNFC(){
-  MFRC522::MIFARE_Key key;
-  for (byte i = 0; i < 6; i++) key.keyByte[i] = 0xFF;
+  static int readingTime = 0;
+  if((readingTime++)==2000){
+      readingTime = 0;
+      MFRC522 mfrc522(SS_PIN, RST_PIN); // RFID 저장 방지를 위한, 객체 매번 생성. (더 좋은 방법이 떠오르질 않는다)
+      mfrc522.PCD_Init();
+      
+      MFRC522::MIFARE_Key key;
+      MFRC522::StatusCode status;
+      for (byte i = 0; i < 6; i++) key.keyByte[i] = 0xFF;
 
-  byte block;
-  byte len;
-  MFRC522::StatusCode status;
-  
+      int it = 0;
+      byte block,len,buffer1[18],buffer2[18];
+
+     if (mfrc522.PICC_IsNewCardPresent() && mfrc522.PICC_ReadCardSerial()) {
+        block = 4;
+        len = 18;
+        
+        status = mfrc522.PCD_Authenticate(MFRC522::PICC_CMD_MF_AUTH_KEY_A, 4, &key, &(mfrc522.uid)); 
+        if (status != MFRC522::STATUS_OK) {
+          Serial.print(F("Authentication failed: "));
+          Serial.println(mfrc522.GetStatusCodeName(status));
+          //mfrc522.PICC_HaltA();
+          //mfrc522.PCD_StopCrypto1();
+          return;
+        }
+      
+        status = mfrc522.MIFARE_Read(block, buffer1, &len);
+        if (status != MFRC522::STATUS_OK) {
+          Serial.print(F("Reading failed: "));
+          Serial.println(mfrc522.GetStatusCodeName(status));
+          //mfrc522.PICC_HaltA();
+          //mfrc522.PCD_StopCrypto1();
+          return;
+        }
+      
+        //Read CO2 bottle code
+        for (uint8_t i = 0; i < 16; i++)
+          if (buffer1[i] != 32)
+            co2code[it++] = (char)buffer1[i];
+        
+        Serial.print(co2code);
+        memset(co2code,0,sizeof(co2code));
+
+        mfrc522.PICC_HaltA();
+        mfrc522.PCD_StopCrypto1();
+      }
+      else{
+       // mfrc522.PICC_HaltA();
+       // mfrc522.PCD_StopCrypto1();
+      }
+  }
 }
 
 /*-------------------------------------------------------------------------------------- 로그 출력용 함수 */
