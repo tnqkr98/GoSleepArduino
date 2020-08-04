@@ -8,6 +8,8 @@
 #include <SPI.h>
 #include <MFRC522.h>
 
+#define DEVELOPER_MODE    1       // <------------ 1로 변경 시, 각종 기기 환경설정 가능, 일반 기기 동작은 0으로 설정.
+
 #define DHTPIN              A0    // 온습도 아날로그
 #define INFRARED_SENSOR     A1    // 적외선 아날로그
 #define ILLUMINANCE_SENSOR  A2    // 조도 아날로그(CDS)
@@ -34,7 +36,6 @@ enum{STOP_MODE=1,WAIT_MODE,DIST_MODE,SLEEP_MODE,SENS_MODE,WAKE_MODE};
 DHT dht(DHTPIN, DHT11);
 RTC_DS3231 rtc;
 Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUM_PIXELS,LED_PIN, NEO_GRB + NEO_KHZ800);
-//MFRC522 mfrc522(SS_PIN, RST_PIN);
 
 short MODE = 2, fanSpeed = 80, brightness = 128;
 short global_mood = 1, alarmType = 1;   // type = 1 : 40분 점진적 기상,   type = 2 : 즉각 기상 (70분미만 수면시)
@@ -64,8 +65,8 @@ void FAN(bool in,bool android);
 void HEAT(bool in,bool android);
 void setAlarmMemory(bool on);             // 알람 설정 및 알람 시각 메모리 영구저장.
 void readNFC();                           // RFID 이용한 NFC 리더
-
-bool rtcAvailabe();                      // RTC 모듈 예외처리
+bool rtcAvailabe();                       // RTC 모듈 예외처리
+void developerMode();                     // 개발자 환경설정
 
 void _printf(const char *s, ...){
   va_list args;
@@ -83,10 +84,8 @@ void setup(){
   Serial1.begin(9600);  // 시리얼 1 : CO2
   Serial2.begin(9600);  // 시리얼 2 : Bluetooth
   dht.begin();
-  Wire.begin();
-  
+  Wire.begin(); 
   SPI.begin();          // RFID
-  //mfrc522.PCD_Init();
 
   //pinMode(CO2VELVE, OUTPUT);  //OPEN
   pinMode(PREV_BT, INPUT);    //RED_BTN
@@ -120,11 +119,15 @@ void setup(){
      time[0] = address[1];
      time[1] = address[2];
   }
-  Serial.println("GoSleep is ready to explosion");
+  Serial.println("");
+  if(DEVELOPER_MODE){
+    Serial.println("Developer Configuaraion Setting Mode ...");
+    developerMode();
+  }
+  Serial.println("GoSleep is ready to operation ... ");
 }
 
 void loop(){
-  
   //rawMessage();
   parseAndroidMessage();      // android 명령 처리
   keyInterrupt(300);          // key button 명령 처리
@@ -722,9 +725,9 @@ void keyMoodLightControl(){
   else{
     LED_MOOD_ON = true;
     Serial.println("무드등 on");
-    pixels.setBrightness(15);
+    pixels.setBrightness(255);
   }
-  pixels.fill(pixels.Color(255, 255, 255), 0, NUM_PIXELS);  // 네오 픽셀 적용순서 ( 밝기 -> Fill -> show )
+  pixels.fill(pixels.Color(255, 255, 255,255), 0, NUM_PIXELS);  // 네오 픽셀 적용순서 ( 밝기 -> Fill -> show )
   pixels.show();  
 }
 
@@ -795,6 +798,69 @@ void readNFC(){
        // mfrc522.PCD_StopCrypto1();
       }
   }
+}
+/*-------------------------------------------------------------------------------------- 개발자 환경설정 */
+void developerMode(){
+  String cmd;
+  menu();
+  while(1){
+    cmd  = readCommand();
+    Serial.print(">> 입력 : ");
+    Serial.print(cmd);
+    if(cmd.charAt(0) == '1'){
+       int cmd2_i =0;
+       char cmd2[50];
+       _printf("\n<<<< 블루투스 환경 설정. 명령어 종류 (소문자도 가능) >>>>\n");
+       _printf("    AT          : 블루투스 연결 상태 확인                    정상 응답 : OK\n");
+       _printf("    AT+NAME     : 현재 기기명 확인                          정상 응답 : +NAME=기기명\n");
+       _printf("    AT+NAME#### : 블루투스 기기명 설정. ex) AT+NAMEgosleep   정상 응답 : OK\n");
+       _printf("    AT+PIN      : 현재 핀번호 확인                          정상 응답 : +PIN=0000\n");
+       _printf("    AT+PIN####  : 핀번호 설정. ex) AT+PIN1234               정상 응답 : OK\n");
+       _printf("    exit        : 블루투스 환경 설정 종료\n");
+       memset(cmd2,'\0',sizeof(cmd2)); 
+       while(1){ 
+          if (Serial2.available())
+              Serial.write(Serial2.read());
+          if (Serial.available()){
+              cmd2[cmd2_i++] = Serial.peek();
+              if(Serial.peek() == '\n'){
+                Serial.print(">> 입력 : ");
+                Serial.print(cmd2);   
+                if(cmd2[0] == 'e' && cmd2[1] == 'x' && cmd2[2] == 'i'&& cmd2[3] == 't') break;       
+                memset(cmd2,'\0',sizeof(cmd2));  
+                cmd2_i = 0;
+              }
+              Serial2.write(Serial.read());
+          }
+       }
+       Serial.println("<<<< 블루투스 환경 설정 종료 >>>>");
+       menu();
+    }
+    else if(cmd.charAt(0) == '5'){
+      return;
+    }
+  }
+}
+
+String readCommand(){
+  char c=' ';
+  String cmd="";
+  while(c != '\n'){
+      if (Serial.available()){
+        c = Serial.read();
+        cmd+=c;
+      }
+  }
+    return cmd;
+}
+
+void menu(){
+  _printf("\n<<<< 번호 선택 후 Enter >>>>\n");
+  _printf("   1. 블루투스 설정\n");
+  _printf("   2. (미개발)제품 코드 설정\n");
+  _printf("   3. (미개발)RTC 설정\n");
+  _printf("   4. (미개발)장착된 CO2 코드 설정\n");
+  _printf("   5. 종료 후 고슬립 작동 시작\n");
 }
 
 /*-------------------------------------------------------------------------------------- 로그 출력용 함수 */
