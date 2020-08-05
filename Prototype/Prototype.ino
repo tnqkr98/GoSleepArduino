@@ -8,7 +8,7 @@
 #include <SPI.h>
 #include <MFRC522.h>
 
-#define DEVELOPER_MODE    1       // <------------ 1로 변경 시, 각종 기기 환경설정 가능, 일반 기기 동작은 0으로 설정.
+#define DEVELOPER_MODE    0       // <------------ 1로 변경 시, 각종 기기 환경설정 가능, 일반 기기 동작은 0으로 설정.
 
 #define DHTPIN              A0    // 온습도 아날로그
 #define INFRARED_SENSOR     A1    // 적외선 아날로그
@@ -19,14 +19,15 @@
 #define DIST_LOWER       20     // 거리 최소
 #define DIST_UPPER       30     // 거리 최대
 #define NUM_PIXELS       12     // 네오픽셀 LED 개수 
+#define CO2_CONCENT     217     // CO2 농도 제어
 
-#define SLEEP_MODE_TOTAL  3     // 수면모드 진행시간(A분 = B+C+D  수식에 맞게 설정할것)  defalut : 25 분
-#define INIT_WIND_TIME    1     // 초기 B분간 팬속도 증가  default : 5 분
-#define CO2_WIND_TIME     1     // C분간 Co2 분 사       default : 15 분
-#define FIN_WIND_TIME     1     // D분간 팬속도 감소      default :  5 분
+#define SLEEP_MODE_TOTAL  25     // 수면모드 진행시간(A분 = B+C+D  수식에 맞게 설정할것)  defalut : 25 분
+#define INIT_WIND_TIME     5     // 초기 B분간 팬속도 증가  default : 5 분
+#define CO2_WIND_TIME     15     // C분간 Co2 분 사       default : 15 분
+#define FIN_WIND_TIME      5     // D분간 팬속도 감소      default :  5 분
 
-#define ALARM_FAN_TIME    2     // 기상모드 팬 시작(-x분)   default : 40분
-#define ALARM_LED_TIME    1     // 기상모드 LED 시작(-y분)  default : 15분
+#define ALARM_LED_TIME   40     // 기상모드 팬 시작(-x분)   default : 40분
+#define ALARM_FAN_TIME   15     // 기상모드 LED 시작(-y분)  default : 15분
 #define LONG_SLEEP       70     // 알람방식의 전환 시간(70<수면시간 : 점진적기상, 70>수면시간 : 즉각기상)
 
 enum{MOTOR_L=2,MOTOR_S=3,CO2VELVE=10,CO2VELVE_S=8,LED_PIN=26,NEXT_BT=30,PREV_BT=28,MOOD=24,VIBE=32,SPEAKER=22};  // 핀 번호
@@ -35,7 +36,7 @@ enum{STOP_MODE=1,WAIT_MODE,DIST_MODE,SLEEP_MODE,SENS_MODE,WAKE_MODE};
 
 DHT dht(DHTPIN, DHT11);
 RTC_DS3231 rtc;
-Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUM_PIXELS,LED_PIN, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUM_PIXELS,LED_PIN, NEO_GRBW + NEO_KHZ800);
 
 short MODE = 2, fanSpeed = 80, brightness = 128;
 short global_mood = 1, alarmType = 1;   // type = 1 : 40분 점진적 기상,   type = 2 : 즉각 기상 (70분미만 수면시)
@@ -100,7 +101,7 @@ void setup(){
   digitalWrite(VIBE,LOW);
   
   analogWrite(MOTOR_S, fanSpeed); // 팬속도
-  analogWrite(CO2VELVE_S, 255);   // 비례제어 (임의값)
+  analogWrite(CO2VELVE_S, CO2_CONCENT);   // 비례제어 (임의값)
 
   #if defined (__AVR_ATtiny85__)
    if (F_CPU == 16000000) clock_prescale_set(clock_div_1);
@@ -374,17 +375,22 @@ void alarmWorking(){
 
     int M = 600; //0.1초 X 600 = 1분
     FAN(ON,false);
-    for(int i=0;i<=ALARM_FAN_TIME*M;i++){
+    for(int i=0;i<=ALARM_LED_TIME*M;i++){
       pastTime = millis();
 
-      if(i%10==0){    //수면모드 동작중 , 매 루프 수행해야 할 것들.
+      if(i%10==0){   
           sendAndroidMessage(1);
           _printf("기상 모드 [%5d 초] 진행중 >> 현재 상태 : ",i/10);
         }
 
       if(i%10==0){
-        fanSpeed = map(i/10,0,ALARM_FAN_TIME*60,0,255);
-        Serial.print("FAN 동작 중");
+        //fanSpeed = map(i/10,0,ALARM_FAN_TIME*60,0,255);
+        //Serial.print("FAN 동작 중");
+        ledbright = map(i/10,0,ALARM_LED_TIME*60,0,255);
+        pixels.fill(pixels.Color(255, 255, 255), 0, NUM_PIXELS); 
+        pixels.setBrightness(ledbright);
+        pixels.show(); 
+        _printf("LED 동작 중[밝기 : %5d] ",ledbright);
       }
 
       parseAndroidMessage();          // 명령 처리
@@ -400,11 +406,13 @@ void alarmWorking(){
       }
 
       if(i%10==0 && i>ALARM_LED_TIME*M){
-        ledbright = map(i/10,ALARM_LED_TIME*60,ALARM_FAN_TIME*60,0,255);
+        /*ledbright = map(i/10,ALARM_LED_TIME*60,ALARM_FAN_TIME*60,0,255);
         pixels.fill(pixels.Color(255, 255, 255), 0, NUM_PIXELS); 
         pixels.setBrightness(ledbright);
         pixels.show(); 
-        _printf(" | LED 동작 중[밝기 : %5d]",ledbright);
+        _printf(" | LED 동작 중[밝기 : %5d]",ledbright);*/
+        fanSpeed = map(i/10,ALARM_FAN_TIME*60,ALARM_LED_TIME*60,0,255);
+        Serial.print("| FAN 동작 중");
       }
        
       while(millis() - pastTime < 100)  // 루프주기 0.1초
@@ -616,7 +624,7 @@ void VELVE(bool in,bool android){
   if(in == ON){
     Serial.println("Velve ON");
     digitalWrite(CO2VELVE, HIGH);
-    analogWrite(CO2VELVE_S, 255);   
+    analogWrite(CO2VELVE_S, CO2_CONCENT);   
   }
   else {
     Serial.println("Velve OFF");
@@ -727,7 +735,7 @@ void keyMoodLightControl(){
     Serial.println("무드등 on");
     pixels.setBrightness(255);
   }
-  pixels.fill(pixels.Color(255, 255, 255,255), 0, NUM_PIXELS);  // 네오 픽셀 적용순서 ( 밝기 -> Fill -> show )
+  pixels.fill(pixels.Color(255, 255, 255), 0, NUM_PIXELS);  // 네오 픽셀 적용순서 ( 밝기 -> Fill -> show )
   pixels.show();  
 }
 
@@ -799,7 +807,7 @@ void readNFC(){
       }
   }
 }
-/*-------------------------------------------------------------------------------------- 개발자 환경설정 */
+/*-------------------------------------------------------------------------------------- 개발자 환경설정[Configuration] */
 void developerMode(){
   String cmd;
   menu();
@@ -810,13 +818,15 @@ void developerMode(){
     if(cmd.charAt(0) == '1'){
        int cmd2_i =0;
        char cmd2[50];
-       _printf("\n<<<< 블루투스 환경 설정. 명령어 종류 (소문자도 가능) >>>>\n");
-       _printf("    AT          : 블루투스 연결 상태 확인                    정상 응답 : OK\n");
-       _printf("    AT+NAME     : 현재 기기명 확인                          정상 응답 : +NAME=기기명\n");
-       _printf("    AT+NAME#### : 블루투스 기기명 설정. ex) AT+NAMEgosleep   정상 응답 : OK\n");
-       _printf("    AT+PIN      : 현재 핀번호 확인                          정상 응답 : +PIN=0000\n");
-       _printf("    AT+PIN####  : 핀번호 설정. ex) AT+PIN1234               정상 응답 : OK\n");
-       _printf("    exit        : 블루투스 환경 설정 종료\n");
+       _printf("\n<<<<                                                  >>>>");
+       _printf("\n<<<<      블루투스 환경 설정. 명령어 종류 (소문자도 가능)   >>>>");
+       _printf("\n<<<<                                                  >>>>\n");
+       _printf("      AT          : 블루투스 연결 상태 확인(최초 마구 입력해서 확인할것) 정상 응답 : OK\n");
+       _printf("      AT+NAME     : 현재 기기명 확인                                 정상 응답 : +NAME=기기명\n");
+       _printf("      AT+NAME#### : 블루투스 기기명 설정. ex) AT+NAMEgosleep         정상 응답 : OK\n");
+       _printf("      AT+PIN      : 현재 핀번호 확인                                 정상 응답 : +PIN=0000\n");
+       _printf("      AT+PIN####  : 핀번호 설정. ex) AT+PIN1234                     정상 응답 : OK\n");
+       _printf("      exit        : 블루투스 환경 설정 종료\n");
        memset(cmd2,'\0',sizeof(cmd2)); 
        while(1){ 
           if (Serial2.available())
@@ -835,6 +845,25 @@ void developerMode(){
        }
        Serial.println("<<<< 블루투스 환경 설정 종료 >>>>");
        menu();
+    }
+    else if(cmd.charAt(0) == '2'){
+      String newCode="NYX-GS";
+      String oldCode="";
+      _printf("\n<<<<            제품 코드(NYX-GS##-######) 설정          >>>>");
+      _printf("\n<<<<     자주 바꾸지 않기를 권장(EEPROM의 쓰기 제한 10만번) >>>>\n\n");
+      _printf("버전 입력(두 자리 숫자) : ");
+      cmd  = readCommand();
+      Serial.println((byte)(cmd.substring(0,2).toInt()));
+      //EEPROM.write(3,(byte)toInt(cmd.substring(0,2)));
+      newCode.concat(cmd.substring(0,2));
+      newCode.concat("-");
+      _printf("일련번호 입력(6자리 숫자) : ");
+      cmd  = readCommand();
+      Serial.print(cmd);
+      newCode.concat(cmd.substring(0,6));
+      _printf("입력된 제품 코드는 < %s >\n",newCode.c_str());
+      _printf("\n<<<< 제품 코드 설정 종료 >>>>\n");
+      menu();
     }
     else if(cmd.charAt(0) == '5'){
       return;
@@ -855,12 +884,16 @@ String readCommand(){
 }
 
 void menu(){
-  _printf("\n<<<< 번호 선택 후 Enter >>>>\n");
-  _printf("   1. 블루투스 설정\n");
-  _printf("   2. (미개발)제품 코드 설정\n");
-  _printf("   3. (미개발)RTC 설정\n");
-  _printf("   4. (미개발)장착된 CO2 코드 설정\n");
-  _printf("   5. 종료 후 고슬립 작동 시작\n");
+  Serial.println("");
+  _printf("<<<<                                                   >>>>\n");
+  _printf("<<<<                번호 선택 후 Enter                  >>>>\n");
+  _printf("<<<< 앱과 연결은 종료 하는 것을 권장 (특히 블루투스 설정 시) >>>>\n");
+  _printf("<<<<                                                   >>>>\n");
+  _printf("       1. 블루투스 설정\n");
+  _printf("       2. (미개발)제품 코드 설정\n");
+  _printf("       3. (미개발)시간(RTC) 설정\n");
+  _printf("       4. (미개발)장착된 CO2 코드 설정\n");
+  _printf("       5. 종료 후 고슬립 작동 시작\n");
 }
 
 /*-------------------------------------------------------------------------------------- 로그 출력용 함수 */
