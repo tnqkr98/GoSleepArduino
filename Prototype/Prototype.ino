@@ -8,7 +8,7 @@
 #include <SPI.h>
 #include <MFRC522.h>
 
-#define DEVELOPER_MODE    0       // <------------ 1로 변경 시, 각종 기기 환경설정 가능, 일반 기기 동작은 0으로 설정.
+#define DEVELOPER_MODE    1       // <------------ 1로 변경 시, 각종 기기 환경설정 가능, 일반 기기 동작은 0으로 설정.
 
 #define DHTPIN              A0    // 온습도 아날로그
 #define INFRARED_SENSOR     A1    // 적외선 아날로그
@@ -19,24 +19,24 @@
 #define DIST_LOWER       20     // 거리 최소
 #define DIST_UPPER       30     // 거리 최대
 #define NUM_PIXELS       12     // 네오픽셀 LED 개수 
-#define CO2_CONCENT     217     // CO2 농도 제어
+#define CO2_CONCENT     250     // CO2 농도 제어
 
-#define SLEEP_MODE_TOTAL  25     // 수면모드 진행시간(A분 = B+C+D  수식에 맞게 설정할것)  defalut : 25 분
-#define INIT_WIND_TIME     5     // 초기 B분간 팬속도 증가  default : 5 분
-#define CO2_WIND_TIME     15     // C분간 Co2 분 사       default : 15 분
-#define FIN_WIND_TIME      5     // D분간 팬속도 감소      default :  5 분
+#define SLEEP_MODE_TOTAL   3     // 수면모드 진행시간(A분 = B+C+D  수식에 맞게 설정할것)  defalut : 25 분
+#define INIT_WIND_TIME     1     // 초기 B분간 팬속도 증가  default : 5 분
+#define CO2_WIND_TIME      1     // C분간 Co2 분 사       default : 15 분
+#define FIN_WIND_TIME      1     // D분간 팬속도 감소      default :  5 분
 
-#define ALARM_LED_TIME   40     // 기상모드 팬 시작(-x분)   default : 40분
-#define ALARM_FAN_TIME   15     // 기상모드 LED 시작(-y분)  default : 15분
-#define LONG_SLEEP       70     // 알람방식의 전환 시간(70<수면시간 : 점진적기상, 70>수면시간 : 즉각기상)
+#define ALARM_LED_TIME    2     // 기상모드 LED 시작x분전 (값: x+y)   default : 40분
+#define ALARM_FAN_TIME    1     // 기상모드 FAN 시작y분전 (값: y)  default : 15분
+#define LONG_SLEEP        5     // 알람방식의 전환 시간(70<수면시간 : 점진적기상, 70>수면시간 : 즉각기상)
 
-enum{MOTOR_L=2,MOTOR_S=3,CO2VELVE=10,CO2VELVE_S=8,LED_PIN=26,NEXT_BT=30,PREV_BT=28,MOOD=24,VIBE=32,SPEAKER=22};  // 핀 번호
+enum{MOTOR_L=2,MOTOR_S=3,CO2VELVE_L=10,CO2VELVE_S=8,LED_PIN=26,NEXT_BT=30,PREV_BT=28,MOOD=24,VIBE=32,SPEAKER=22};  // 핀 번호
 enum{SS_PIN=53,RST_PIN=5};      // RFID(NFC관련) 핀번호
 enum{STOP_MODE=1,WAIT_MODE,DIST_MODE,SLEEP_MODE,SENS_MODE,WAKE_MODE};
 
 DHT dht(DHTPIN, DHT11);
 RTC_DS3231 rtc;
-Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUM_PIXELS,LED_PIN, NEO_GRBW + NEO_KHZ800);
+Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUM_PIXELS,LED_PIN, NEO_GRB + NEO_KHZ800);
 
 short MODE = 2, fanSpeed = 80, brightness = 128;
 short global_mood = 1, alarmType = 1;   // type = 1 : 40분 점진적 기상,   type = 2 : 즉각 기상 (70분미만 수면시)
@@ -48,6 +48,7 @@ bool SetAlramOn = false, BluetoothOn = false;
 bool LED_MOOD_ON = false;
 bool ON = true, OFF = false;
 int modeNextEnable, modeBackEnable;
+String product_code="NYX-";
 
 void parseAndroidMessage();               // 안드로이드 수신 메시지 분석 후 출력 함수
 void sendAndroidMessage(bool direct);     // 안드로이드 발신 메시지 설정 함수(0:동기, 1: 비동기)
@@ -88,21 +89,19 @@ void setup(){
   Wire.begin(); 
   SPI.begin();          // RFID
 
-  //pinMode(CO2VELVE, OUTPUT);  //OPEN
   pinMode(PREV_BT, INPUT);    //RED_BTN
   pinMode(NEXT_BT, INPUT);    //BLUE_BTN
   pinMode(VIBE,OUTPUT);       
   pinMode(SPEAKER, OUTPUT);   //SPEAKER_PIN
   pinMode(ILLUMINANCE_SENSOR, INPUT);
   
-  //digitalWrite(CO2VELVE, HIGH);   //OPEN
   digitalWrite(PREV_BT, LOW);    //RED_BTN
   digitalWrite(NEXT_BT, LOW);    //BLUE_BTN
   digitalWrite(VIBE,LOW);
   
-  analogWrite(MOTOR_S, fanSpeed); // 팬속도
-  analogWrite(CO2VELVE_S, CO2_CONCENT);   // 비례제어 (임의값)
-
+  digitalWrite(4,LOW);            // FAN 안쓰는 핀 고정값
+  digitalWrite(9,LOW);            // VELVE 안쓰는 핀 고정값
+   
   #if defined (__AVR_ATtiny85__)
    if (F_CPU == 16000000) clock_prescale_set(clock_div_1);
   #endif 
@@ -111,21 +110,34 @@ void setup(){
   pixels.begin();
   pixels.show();
   
-  byte address[3];
-  address[0] = EEPROM.read(0);
-  address[1] = EEPROM.read(1);
-  address[2] = EEPROM.read(2);
-  if(address[0] == 1){
+  byte address[7]={0};
+  long int code = 0;
+  for(int i=0;i<7;i++)            // EEPROM 읽기(저장값)
+    address[i] = EEPROM.read(i);
+
+  if(address[0] == 1){            // 저장된 알람시간 읽기
      SetAlramOn = true;
      time[0] = address[1];
      time[1] = address[2];
   }
+
+  if(address[3] != 0){
+    code += (int)address[3] * 1000000;
+    code += (int)address[4] * 10000;
+    code += (int)address[5] * 100;
+    code += (int)address[6];
+    product_code+=code;
+    _printf(" Product Code : %d\n", code);
+  }
+  else
+    Serial.println(" Product Code : 지정되지 않음 ");
+  
   Serial.println("");
   if(DEVELOPER_MODE){
-    Serial.println("Developer Configuaraion Setting Mode ...");
+    Serial.println(" Developer Configuaraion Setting Mode ...");
     developerMode();
   }
-  Serial.println("GoSleep is ready to operation ... ");
+  Serial.println(" GoSleep is ready to operation ... ");
 }
 
 void loop(){
@@ -157,6 +169,7 @@ void modeControl(){
            pixels.fill(pixels.Color(255, 255, 255), 0, NUM_PIXELS);
            pixels.show();
        }
+       alarmType = 0;
     }
 
     static long start = 0;
@@ -213,15 +226,17 @@ void modeControl(){
               pixels.show();
               FAN(ON,false);
               fanSpeed = 255;
-              analogWrite(MOTOR_S, fanSpeed);     
+              analogWrite(MOTOR_L, fanSpeed);     
               MODE = WAKE_MODE;               // 즉각 기상
             }
 
             alarmMin = (alarmMin-ALARM_FAN_TIME<0)?(alarmMin+1400):(alarmMin-ALARM_FAN_TIME);
             //_printf("nowMin : %d  , alarmMin : %d\n",nowMin,alarmMin);
             
-            if(alarmType == 1 && alarmMin == nowMin && now.second() == 0)
+            if(alarmType == 1 && alarmMin == nowMin && now.second() == 0){
+              MODE = WAKE_MODE;
               alarmWorking();       // 점진적 기상
+            }
           }
         }
         modeNextEnable = true;
@@ -304,7 +319,8 @@ void sleepModeWorking(){
         if(i<INIT_WIND_TIME*M && i%10==0){
             fanSpeed = map(i/10,0,60*INIT_WIND_TIME,0,255);    //속도 조절은 1초 단위. (즉 10루프당 1회 속도조절)  여기서 255가 사용자가 설정한 값이여야.
             _printf("팬속도 증가 [속도 값 %3d]\n",fanSpeed);
-            analogWrite(MOTOR_S, fanSpeed);
+            //analogWrite(MOTOR_S, fanSpeed);
+            analogWrite(MOTOR_L, fanSpeed);
         }
         else if(i<(INIT_WIND_TIME+CO2_WIND_TIME)*M){
           if(i%10==0)
@@ -313,7 +329,8 @@ void sleepModeWorking(){
         else if(i<SLEEP_MODE_TOTAL*M && i%10 == 0){
           fanSpeed = map(i/10,60*(INIT_WIND_TIME+CO2_WIND_TIME),60*SLEEP_MODE_TOTAL,255,0);
           _printf("팬속도 감소 [속도 값 %3d]\n",fanSpeed);
-          analogWrite(MOTOR_S, fanSpeed);
+          //analogWrite(MOTOR_S, fanSpeed);
+          analogWrite(MOTOR_L, fanSpeed);
         }
 
         if(i==SLEEP_MODE_TOTAL*M - 1) FAN(OFF,false);
@@ -405,14 +422,15 @@ void alarmWorking(){
           return;
       }
 
-      if(i%10==0 && i>ALARM_LED_TIME*M){
+      if(i%10==0 && i>ALARM_FAN_TIME*M){
         /*ledbright = map(i/10,ALARM_LED_TIME*60,ALARM_FAN_TIME*60,0,255);
         pixels.fill(pixels.Color(255, 255, 255), 0, NUM_PIXELS); 
         pixels.setBrightness(ledbright);
         pixels.show(); 
         _printf(" | LED 동작 중[밝기 : %5d]",ledbright);*/
         fanSpeed = map(i/10,ALARM_FAN_TIME*60,ALARM_LED_TIME*60,0,255);
-        Serial.print("| FAN 동작 중");
+        analogWrite(MOTOR_L, fanSpeed);
+        _printf("| FAN 동작 중[속도 : %5d] ",fanSpeed);
       }
        
       while(millis() - pastTime < 100)  // 루프주기 0.1초
@@ -446,7 +464,7 @@ void sendAndroidMessage(bool direct){     // 매개변수: 전송 주기 관계�
         
       if(Serial1.available()){
         long ccc = Serial1.parseInt();
-        if(ccc*10>300 && ccc*10 <100000)
+        if(ccc*10>300 && ccc*10 <250000)
           co2 = ccc;
       }
       else
@@ -555,7 +573,7 @@ void parseAndroidMessage(){
             }
             fanSpeed = atoi(buf3);
             _printf("팬 속도 설정 : %d\n",fanSpeed);
-            analogWrite(MOTOR_S, fanSpeed); 
+            analogWrite(MOTOR_L, fanSpeed); 
             memset(buf3,'\0',sizeof(buf3));
           }
           else // 팬 on/off 제어
@@ -622,13 +640,13 @@ void moodLedControl(int r,int g,int b){
 /*-------------------------------------------------------------------------------------- 모듈 제어 함수 */
 void VELVE(bool in,bool android){
   if(in == ON){
-    Serial.println("Velve ON");
-    digitalWrite(CO2VELVE, HIGH);
-    analogWrite(CO2VELVE_S, CO2_CONCENT);   
+    Serial.println("Velve ON");   
+    analogWrite(CO2VELVE_L, CO2_CONCENT);
+    digitalWrite(CO2VELVE_S, HIGH);
   }
   else {
     Serial.println("Velve OFF");
-    digitalWrite(CO2VELVE, LOW);   //밸브 잠금
+    digitalWrite(CO2VELVE_S, LOW);
   }
 
   if(!android && in){
@@ -639,12 +657,12 @@ void VELVE(bool in,bool android){
 void FAN(bool in,bool android){
   if(in == ON){
     Serial.println("Fan ON");
-    digitalWrite(MOTOR_L, HIGH);  
-    analogWrite(MOTOR_S, fanSpeed);   
+    analogWrite(MOTOR_L, fanSpeed);  
+    digitalWrite(MOTOR_S, HIGH);
   }
   else {
     Serial.println("Fan OFF");
-    digitalWrite(MOTOR_L, LOW);
+    digitalWrite(MOTOR_S, LOW);
   }
     
   if(!android && in){
@@ -746,10 +764,10 @@ bool rtcAvailable(){
     ret_value = false;
     Serial.println("RTC Error : The RTC module is not available");
   }
-  /*if(rtc.lostPower()){  //이상함
+  if(rtc.lostPower()){  // 가끔 이상함
     ret_value = false;
     Serial.println("RTC Error : The RTC module losts power");
-  }*/
+  }
   return ret_value;
 }
 
@@ -847,25 +865,75 @@ void developerMode(){
        menu();
     }
     else if(cmd.charAt(0) == '2'){
-      String newCode="NYX-GS";
+      long numCode = 0;
       String oldCode="";
-      _printf("\n<<<<            제품 코드(NYX-GS##-######) 설정          >>>>");
+      _printf("\n<<<<               제품 코드(NYX-V######) 설정           >>>>");
       _printf("\n<<<<     자주 바꾸지 않기를 권장(EEPROM의 쓰기 제한 10만번) >>>>\n\n");
-      _printf("버전 입력(두 자리 숫자) : ");
+      _printf("버전 입력(한 자리 숫자) : ");
       cmd  = readCommand();
-      Serial.println((byte)(cmd.substring(0,2).toInt()));
-      //EEPROM.write(3,(byte)toInt(cmd.substring(0,2)));
-      newCode.concat(cmd.substring(0,2));
-      newCode.concat("-");
+      Serial.println((byte)(cmd.substring(0,1).toInt()));
+      numCode += (byte)(cmd.substring(0,1).toInt())*1000000;
+      EEPROM.write(3,(byte)(cmd.substring(0,1).toInt()));
+      
       _printf("일련번호 입력(6자리 숫자) : ");
       cmd  = readCommand();
-      Serial.print(cmd);
-      newCode.concat(cmd.substring(0,6));
-      _printf("입력된 제품 코드는 < %s >\n",newCode.c_str());
+      Serial.print(cmd.substring(0,2));
+      EEPROM.write(4,(byte)(cmd.substring(0,2).toInt()));      // 메모리 4번 주소
+      numCode += (byte)(cmd.substring(0,2).toInt())*10000;
+      Serial.print(cmd.substring(2,4));
+      EEPROM.write(5,(byte)(cmd.substring(2,4).toInt()));      // 메모리 5번 주소
+      numCode += (byte)(cmd.substring(2,4).toInt())*100;
+      Serial.println(cmd.substring(4,6));
+      EEPROM.write(6,(byte)(cmd.substring(4,6).toInt()));      // 메모리 6번 주소
+      numCode += (byte)(cmd.substring(4,6).toInt());
+
+      _printf("입력된 제품 코드는 < NYX-%ld >\n",numCode);
       _printf("\n<<<< 제품 코드 설정 종료 >>>>\n");
       menu();
     }
     else if(cmd.charAt(0) == '5'){
+      char testcmd;
+      bool ontest = false;
+      _printf("\n<<<<                         팬, 밸브 테스트                             >>>>");
+      _printf("\n<<<<           (1 : 최대 출력 작동, 2: 작동 중지, 3: 테스트 종료)          >>>>\n\n");
+      while(1){
+        if(Serial1.available()){
+          long ccc = Serial1.parseInt();
+          if(ccc*10>300 && ccc*10 <250000){
+            _printf("현재 분사부 CO2 농도 : %ld", ccc*10);
+            if(ontest)
+              _printf("(최대 출력 작동 중)");
+            Serial.println();
+          }
+        }
+        else
+          Serial.println("Co2 Sensor Error");
+        delay(1000);
+
+        testcmd = Serial.read();
+        if(testcmd == '1'){
+          analogWrite(MOTOR_L, 255);  
+          digitalWrite(MOTOR_S, HIGH); 
+          //digitalWrite(4, LOW); 
+
+          analogWrite(CO2VELVE_L, 255);
+          digitalWrite(CO2VELVE_S, HIGH);
+          ontest = true;
+        }
+        else if(testcmd == '2'){
+          digitalWrite(MOTOR_S, LOW); 
+          digitalWrite(CO2VELVE_S, LOW);
+          ontest = false;
+        }
+        else if(testcmd == '3'){
+          break;
+        }
+        testcmd='.';
+      }
+      Serial.println("<<<< 팬, 밸브 테스트 종료 >>>>");
+      menu();
+    }
+    else if(cmd.charAt(0) == '6'){
       return;
     }
   }
@@ -893,7 +961,8 @@ void menu(){
   _printf("       2. (미개발)제품 코드 설정\n");
   _printf("       3. (미개발)시간(RTC) 설정\n");
   _printf("       4. (미개발)장착된 CO2 코드 설정\n");
-  _printf("       5. 종료 후 고슬립 작동 시작\n");
+  _printf("       5. 팬, 밸브 테스트 (최대 출력으로 동작)\n");
+  _printf("       6. 종료 후 고슬립 작동 시작\n");
 }
 
 /*-------------------------------------------------------------------------------------- 로그 출력용 함수 */
@@ -909,9 +978,15 @@ void printLog(bool direct){
           case WAKE_MODE:Serial.print(" 현재 상태 : 기상 모드 ");break;
       }
       if(BluetoothOn)Serial.print("| 안드로이드와 통신 ON ");    
-      if(SetAlramOn)
+      if(SetAlramOn){
          _printf("| 저장된 알람 시간 :%d시 %d분",time[0],time[1]);
-      
+         if(alarmType ==0)
+            Serial.print(" | 알람 방식 : 설정 안됨" );
+         else if(alarmType ==1)
+            Serial.print(" | 알람 방식 : 점진적 기상" );
+         else if(alarmType ==2)
+            Serial.print(" | 알람 방식 : 즉각 기상" );
+      }
       Serial.println("");
       printTime = 0;
   }
