@@ -11,7 +11,7 @@
 
 #define DS3231_I2C_ADDRESS 104    // RTC 모듈 주소
 
-#define DEVELOPER_MODE    0       // <------------ 1로 변경 시, 각종 기기 환경설정 가능, 일반 기기 동작은 0으로 설정.
+#define DEVELOPER_MODE    1       // <------------ 1로 변경 시, 각종 기기 환경설정 가능, 일반 기기 동작은 0으로 설정.
 
 #define DHTPIN              A0    // 온습도 아날로그
 #define INFRARED_SENSOR     A1    // 적외선 아날로그
