@@ -336,7 +336,7 @@ void sleepModeWorking(){
         }
  
         if(i<INIT_WIND_TIME*M && i%10==0){
-            fanSpeed = map(i/10,0,60*INIT_WIND_TIME,0,user_fanSpeed);    //속도 조절은 1초 단위. (즉 10루프당 1회 속도조절)  여기서 255가 사용자가 설정한 값이여야.
+            fanSpeed = map(i/10,0,60*INIT_WIND_TIME,20,user_fanSpeed);    //속도 조절은 1초 단위. (즉 10루프당 1회 속도조절)  여기서 255가 사용자가 설정한 값이여야.
             _printf("팬속도 증가 [속도 값 %3d]\n",fanSpeed);
             //analogWrite(MOTOR_S, fanSpeed);
             analogWrite(MOTOR_L, fanSpeed);
@@ -346,7 +346,7 @@ void sleepModeWorking(){
             Serial.println("수면 가스 분사 중..");
         }
         else if(i<SLEEP_MODE_TOTAL*M && i%10 == 0){
-          fanSpeed = map(i/10,60*(INIT_WIND_TIME+CO2_WIND_TIME),60*SLEEP_MODE_TOTAL,user_fanSpeed,0);
+          fanSpeed = map(i/10,60*(INIT_WIND_TIME+CO2_WIND_TIME),60*SLEEP_MODE_TOTAL,user_fanSpeed,20);  // 최저속도 20으로(소음때매)
           _printf("팬속도 감소 [속도 값 %3d]\n",fanSpeed);
           //analogWrite(MOTOR_S, fanSpeed);
           analogWrite(MOTOR_L, fanSpeed);
@@ -440,7 +440,7 @@ void alarmWorking(){
       }
 
       if(i%10==0 && i>(ALARM_LED_TIME-ALARM_FAN_TIME)*M){
-        fanSpeed = map(i/10,ALARM_FAN_TIME*60,ALARM_LED_TIME*60,0,user_fanSpeed);     // 유저가 설정한 최대 속도
+        fanSpeed = map(i/10,ALARM_FAN_TIME*60,ALARM_LED_TIME*60,20,user_fanSpeed);     // 유저가 설정한 최대 속도
         analogWrite(MOTOR_L, fanSpeed);
         _printf("| FAN 동작 중[속도 : %5d] ",fanSpeed);
       }
@@ -614,7 +614,7 @@ void parseAndroidMessage(){
               delay(5);
             }
             user_Co2Concent = atoi(buf3);
-            _printf("비례 제어 : %d\n",user_Co2Concent);
+            _printf("농도 제어 : %d\n",user_Co2Concent);
             //user_Co2Concent = fanSpeed;
             analogWrite(CO2VELVE_L, user_Co2Concent); 
             memset(buf3,'\0',sizeof(buf3));
@@ -706,7 +706,8 @@ void moodLedControl(int r,int g,int b){
 void VELVE(bool in,bool android){
   if(in == ON){
     Serial.println("Velve ON");   
-    analogWrite(CO2VELVE_L, CO2_CONCENT);
+    //analogWrite(CO2VELVE_L, CO2_CONCENT);
+    analogWrite(CO2VELVE_L, user_Co2Concent);
     digitalWrite(CO2VELVE_S, HIGH);
   }
   else {
