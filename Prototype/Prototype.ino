@@ -11,7 +11,7 @@
 
 #define DS3231_I2C_ADDRESS 104    // RTC 모듈 주소
 
-#define DEVELOPER_MODE    1       // <------------ 1로 변경 시, 각종 기기 환경설정 가능, 일반 기기 동작은 0으로 설정.
+#define DEVELOPER_MODE    0       // <------------ 1로 변경 시, 각종 기기 환경설정 가능, 일반 기기 동작은 0으로 설정.
 
 #define DHTPIN              A0    // 온습도 아날로그
 #define INFRARED_SENSOR     A1    // 적외선 아날로그
@@ -440,7 +440,7 @@ void alarmWorking(){
       }
 
       if(i%10==0 && i>(ALARM_LED_TIME-ALARM_FAN_TIME)*M){
-        fanSpeed = map(i/10,ALARM_FAN_TIME*60,ALARM_LED_TIME*60,20,user_fanSpeed);     // 유저가 설정한 최대 속도
+        fanSpeed = map(i/10,ALARM_FAN_TIME*60,ALARM_LED_TIME*60,20,255);
         analogWrite(MOTOR_L, fanSpeed);
         _printf("| FAN 동작 중[속도 : %5d] ",fanSpeed);
       }
