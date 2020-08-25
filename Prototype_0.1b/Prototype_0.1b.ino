@@ -11,7 +11,7 @@
 
 #define DS3231_I2C_ADDRESS 104    // RTC 모듈 주소
 
-#define DEVELOPER_MODE    1       // <------------ 1로 변경 시, 각종 기기 환경설정 가능, 일반 기기 동작은 0으로 설정.
+#define DEVELOPER_MODE    0       // <------------ 1로 변경 시, 각종 기기 환경설정 가능, 일반 기기 동작은 0으로 설정.
 
 #define DHTPIN              A0    // 온습도 아날로그
 #define INFRARED_SENSOR     A1    // 적외선 아날로그
@@ -24,13 +24,13 @@
 #define NUM_PIXELS       12     // 네오픽셀 LED 개수 
 #define CO2_CONCENT     250     // CO2 농도 제어
 
-#define SLEEP_MODE_TOTAL 25     // 수면모드 진행시간(A분 = B+C+D  수식에 맞게 설정할것)  defalut : 25 분
-#define INIT_WIND_TIME    5     // 초기 B분간 팬속도 증가  default : 5 분
-#define CO2_WIND_TIME    15     // C분간 Co2 분 사        default : 15 분
-#define FIN_WIND_TIME     5     // D분간 팬속도 감소       default :  5 분
+#define SLEEP_MODE_TOTAL  3     // 수면모드 진행시간(A분 = B+C+D  수식에 맞게 설정할것)  defalut : 25 분
+#define INIT_WIND_TIME    1     // 초기 B분간 팬속도 증가  default : 5 분
+#define CO2_WIND_TIME     1     // C분간 Co2 분 사        default : 15 분
+#define FIN_WIND_TIME     1     // D분간 팬속도 감소       default :  5 분
 
-#define ALARM_LED_TIME   40     // 기상모드 LED 시작x분전 (값: x+y)   default : 40분
-#define ALARM_FAN_TIME   15     // 기상모드 FAN 시작y분전 (값: y)     default : 15분
+#define ALARM_LED_TIME   20     // 기상모드 LED 시작x분전 (값: x+y)   default : 40분
+#define ALARM_FAN_TIME   10     // 기상모드 FAN 시작y분전 (값: y)     default : 15분
 #define LONG_SLEEP       70     // 알람방식의 전환 시간(70<수면시간 : 점진적기상, 70>수면시간 : 즉각기상)
 
 enum{MOTOR_L=2,MOTOR_S=3,CO2VELVE_L=10,CO2VELVE_S=8,LED_PIN=26,NEXT_BT=30,PREV_BT=28,MOOD=24,VIBE=32,SPEAKER=22};  // 핀 번호
