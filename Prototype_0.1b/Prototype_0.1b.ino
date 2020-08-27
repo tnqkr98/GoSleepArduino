@@ -11,7 +11,7 @@
 
 #define DS3231_I2C_ADDRESS 104    // RTC 모듈 주소
 
-#define DEVELOPER_MODE    0       // <------------ 1로 변경 시, 각종 기기 환경설정 가능, 일반 기기 동작은 0으로 설정.
+#define DEVELOPER_MODE    1      // <------------ 1로 변경 시, 각종 기기 환경설정 가능, 일반 기기 동작은 0으로 설정.
 
 #define DHTPIN              A0    // 온습도 아날로그
 #define INFRARED_SENSOR     A1    // 적외선 아날로그
@@ -22,16 +22,15 @@
 #define DIST_LOWER       20     // 거리 최소
 #define DIST_UPPER       30     // 거리 최대
 #define NUM_PIXELS       12     // 네오픽셀 LED 개수 
-#define CO2_CONCENT     250     // CO2 농도 제어
 
-#define SLEEP_MODE_TOTAL  3     // 수면모드 진행시간(A분 = B+C+D  수식에 맞게 설정할것)  defalut : 25 분
-#define INIT_WIND_TIME    1     // 초기 B분간 팬속도 증가  default : 5 분
-#define CO2_WIND_TIME     1     // C분간 Co2 분 사        default : 15 분
-#define FIN_WIND_TIME     1     // D분간 팬속도 감소       default :  5 분
+#define SLEEP_MODE_TOTAL 22    // 수면모드 진행시간(A분 = B+C+D  수식에 맞게 설정할것)  defalut : 25 분
+#define INIT_WIND_TIME   2     // 초기 B분간 팬속도 증가  default : 5 분
+#define CO2_WIND_TIME    15    // C분간 Co2 분 사        default : 15 분
+#define FIN_WIND_TIME    5     // D분간 팬속도 감소       default :  5 분
 
-#define ALARM_LED_TIME   20     // 기상모드 LED 시작x분전 (값: x+y)   default : 40분
-#define ALARM_FAN_TIME   10     // 기상모드 FAN 시작y분전 (값: y)     default : 15분
-#define LONG_SLEEP       70     // 알람방식의 전환 시간(70<수면시간 : 점진적기상, 70>수면시간 : 즉각기상)
+#define ALARM_LED_TIME   15     // 기상모드 LED 시작x분전(x>=y)    default : 40분
+#define ALARM_FAN_TIME   15     // 기상모드 FAN 시작y분전          default : 15분
+#define LONG_SLEEP       70    // 알람방식의 전환 시간(70<수면시간 : 점진적기상, 70>수면시간 : 즉각기상)
 
 enum{MOTOR_L=2,MOTOR_S=3,CO2VELVE_L=10,CO2VELVE_S=8,LED_PIN=26,NEXT_BT=30,PREV_BT=28,MOOD=24,VIBE=32,SPEAKER=22};  // 핀 번호
 enum{SS_PIN=53,RST_PIN=5};      // RFID(NFC관련) 핀번호
@@ -43,8 +42,12 @@ Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUM_PIXELS,LED_PIN, NEO_GRBW + NEO_
 
 short MODE = 2, fanSpeed = 100, brightness = 128;    // 제품 상태
 short global_mood = 1, alarmType = 1;   // type = 1 : 40분 점진적 기상,   type = 2 : 즉각 기상 (70분미만 수면시)
-short user_fanSpeed = 100, user_Co2Concent = 250;    // 유저가 택한 상태
 long int code = 0;
+
+// User Custom Variable 
+short user_fanSpeed = 100, user_Co2Concent = 250;
+short alarm_fanSpeed = 255, alarm_Led_bright = 250;
+bool alarmLedTone = false; // false : warm톤   true : cool톤
 
 char c,buf2[2],buf3[3],buf_rgb[3][4],co2code[36];      // 각종 읽기 버퍼
 short bluetoothCount = 0;
@@ -157,7 +160,6 @@ void loop(){
   sendAndroidMessage(0);
   printLog(0);
 
-  //if (mfrc522.PICC_IsNewCardPresent() && mfrc522.PICC_ReadCardSerial())
   readNFC();
   modeControl();
 
@@ -245,7 +247,7 @@ void modeControl(){
               timeT1 = 0;
             }
             
-            alarmMin = (alarmMin-ALARM_FAN_TIME<0)?(alarmMin+1400):(alarmMin-ALARM_LED_TIME);
+            alarmMin = (alarmMin-ALARM_LED_TIME<0)?(alarmMin-ALARM_LED_TIME+1440):(alarmMin-ALARM_LED_TIME);
 
             if(timeT2++ == 2000 && alarmType == 1){
               _printf(" 점진 기상 시간 로그 >>  nowMin : %d  , alarmMin : %d\n",nowMin,alarmMin);
@@ -267,8 +269,10 @@ void modeControl(){
         modeBackEnable = false;
     }
 
-    if(MODE > WAKE_MODE)
-        MODE = WAIT_MODE;
+    if(MODE > WAKE_MODE){
+       MODE = WAIT_MODE;
+       FAN(OFF,false);
+    }
 }
 /*-------------------------------------------------------------------------------------- [거리 측정 모드] 동작 함수 */
 bool distanceCheck(){   // 거리 측정 해서 적정 거리 시, true 반환
@@ -336,20 +340,22 @@ void sleepModeWorking(){
         }
  
         if(i<INIT_WIND_TIME*M && i%10==0){
-            fanSpeed = map(i/10,0,60*INIT_WIND_TIME,20,user_fanSpeed);    //속도 조절은 1초 단위. (즉 10루프당 1회 속도조절)  여기서 255가 사용자가 설정한 값이여야.
+            fanSpeed = map(i/10,0,60*INIT_WIND_TIME,40,user_fanSpeed);    //속도 조절은 1초 단위. (즉 10루프당 1회 속도조절)  여기서 255가 사용자가 설정한 값이여야.
             _printf("팬속도 증가 [속도 값 %3d]\n",fanSpeed);
             //analogWrite(MOTOR_S, fanSpeed);
             analogWrite(MOTOR_L, fanSpeed);
+            //pwmWrite(MOTOR_L,fanSpeed);
         }
         else if(i<(INIT_WIND_TIME+CO2_WIND_TIME)*M){
           if(i%10==0)
             Serial.println("수면 가스 분사 중..");
         }
         else if(i<SLEEP_MODE_TOTAL*M && i%10 == 0){
-          fanSpeed = map(i/10,60*(INIT_WIND_TIME+CO2_WIND_TIME),60*SLEEP_MODE_TOTAL,user_fanSpeed,20);  // 최저속도 20으로(소음때매)
+          fanSpeed = map(i/10,60*(INIT_WIND_TIME+CO2_WIND_TIME),60*SLEEP_MODE_TOTAL,user_fanSpeed,40);  // 최저속도 20으로(소음때매)
           _printf("팬속도 감소 [속도 값 %3d]\n",fanSpeed);
           //analogWrite(MOTOR_S, fanSpeed);
           analogWrite(MOTOR_L, fanSpeed);
+          //pwmWrite(MOTOR_L,fanSpeed);
         }
 
         if(i==SLEEP_MODE_TOTAL*M - 1) FAN(OFF,false);
@@ -440,7 +446,7 @@ void alarmWorking(){
       }
 
       if(i%10==0 && i>(ALARM_LED_TIME-ALARM_FAN_TIME)*M){
-        fanSpeed = map(i/10,ALARM_FAN_TIME*60,ALARM_LED_TIME*60,20,255);
+        fanSpeed = map(i/10,ALARM_LED_TIME*60-ALARM_FAN_TIME*60,ALARM_LED_TIME*60,40,alarm_fanSpeed);
         analogWrite(MOTOR_L, fanSpeed);
         _printf("| FAN 동작 중[속도 : %5d] ",fanSpeed);
       }
@@ -548,7 +554,6 @@ void rawMessage(){
  while(Serial2.peek()!=-1)
       Serial.write(Serial2.read());
 }
-
 /*-------------------------------------------------------------------------------------- 안드로이드 수신 메시지 분석 함수 */
 void parseAndroidMessage(){
   int readHead;
@@ -706,7 +711,6 @@ void moodLedControl(int r,int g,int b){
 void VELVE(bool in,bool android){
   if(in == ON){
     Serial.println("Velve ON");   
-    //analogWrite(CO2VELVE_L, CO2_CONCENT);
     analogWrite(CO2VELVE_L, user_Co2Concent);
     digitalWrite(CO2VELVE_S, HIGH);
   }
@@ -739,13 +743,9 @@ void FAN(bool in,bool android){
     
   if(!android && in){
     Serial2.print("f");Serial2.println(",1");
-    Serial2.print("f");Serial2.println(",1");
-    Serial2.print("f");Serial2.println(",1");
   }
   else if(!android && !in){
     Serial2.print("f");Serial2.println(",0");
-    Serial2.print("f");Serial2.println(",0"); 
-    Serial2.print("f");Serial2.println(",0"); 
   }
 }
 void HEAT(bool in,bool android){
@@ -754,12 +754,8 @@ void HEAT(bool in,bool android){
 
   if(!android && in){
     Serial2.print("h");Serial2.println(",1");
-    Serial2.print("h");Serial2.println(",1");
-    Serial2.print("h");Serial2.println(",1");
   }
   else if(!android && !in){
-    Serial2.print("h");Serial2.println(",0");
-    Serial2.print("h");Serial2.println(",0");
     Serial2.print("h");Serial2.println(",0");
  }
 }
@@ -785,7 +781,6 @@ void keyInterrupt(int PUSH_TIMING){
       }
       else Serial.println("이전 모드로 이동 불가");
     }
-    //return 1;
   }
   else if(digitalRead(PREV_BT) == LOW)
      prev_stack = 0;
@@ -802,7 +797,6 @@ void keyInterrupt(int PUSH_TIMING){
         sendAndroidMessage(1);
         next_stack = 0;
       }
-      //return 1;
     }
   }else if(digitalRead(NEXT_BT) == LOW)
      next_stack = 0;
@@ -819,11 +813,8 @@ void keyInterrupt(int PUSH_TIMING){
         keyMoodLightControl();
       }
     }
-    //return 1;
   }else if(digitalRead(NEXT_BT) == LOW || digitalRead(PREV_BT) == LOW)
      mood_stack = 0;
-
-  //return 0;
 }
 
 void keyMoodLightControl(){
