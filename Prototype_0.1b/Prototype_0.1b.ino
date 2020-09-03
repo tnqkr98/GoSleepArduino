@@ -11,7 +11,7 @@
 
 #define DS3231_I2C_ADDRESS 104    // RTC 모듈 주소
 
-#define DEVELOPER_MODE    1      // <------------ 1로 변경 시, 각종 기기 환경설정 가능, 일반 기기 동작은 0으로 설정.
+#define DEVELOPER_MODE    0      // <------------ 1로 변경 시, 각종 기기 환경설정 가능, 일반 기기 동작은 0으로 설정.
 
 #define DHTPIN              A0    // 온습도 아날로그
 #define INFRARED_SENSOR     A1    // 적외선 아날로그
@@ -30,22 +30,22 @@
 
 #define ALARM_LED_TIME   15     // 기상모드 LED 시작x분전(x>=y)    default : 40분
 #define ALARM_FAN_TIME   15     // 기상모드 FAN 시작y분전          default : 15분
-#define LONG_SLEEP       70    // 알람방식의 전환 시간(70<수면시간 : 점진적기상, 70>수면시간 : 즉각기상)
+#define LONG_SLEEP       70     // 알람방식의 전환 시간(70<수면시간 : 점진적기상, 70>수면시간 : 즉각기상)
 
-enum{MOTOR_L=2,MOTOR_S=3,CO2VELVE_L=10,CO2VELVE_S=8,LED_PIN=26,NEXT_BT=30,PREV_BT=28,MOOD=24,VIBE=32,SPEAKER=22};  // 핀 번호
+enum{MOTOR_L=2,MOTOR_S=3,CO2VALVE_L=10,CO2VALVE_S=8,LED_PIN=26,NEXT_BT=30,PREV_BT=28,MOOD=24,VIBE=32,SPEAKER=22};  // 핀 번호
 enum{SS_PIN=53,RST_PIN=5};      // RFID(NFC관련) 핀번호
 enum{STOP_MODE=1,WAIT_MODE,DIST_MODE,SLEEP_MODE,SENS_MODE,WAKE_MODE};
 
 DHT dht(DHTPIN, DHT11);
 RTC_DS3231 rtc;
-Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUM_PIXELS,LED_PIN, NEO_GRBW + NEO_KHZ800);
+Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUM_PIXELS,LED_PIN, NEO_GRB + NEO_KHZ800);
 
 short MODE = 2, fanSpeed = 100, brightness = 128;    // 제품 상태
 short global_mood = 1, alarmType = 1;   // type = 1 : 40분 점진적 기상,   type = 2 : 즉각 기상 (70분미만 수면시)
 long int code = 0;
 
 // User Custom Variable 
-short user_fanSpeed = 100, user_Co2Concent = 250;
+short user_fanSpeed = 100, user_Co2Concent = 255;
 short alarm_fanSpeed = 255, alarm_Led_bright = 250;
 bool alarmLedTone = false; // false : warm톤   true : cool톤
 
@@ -70,7 +70,7 @@ void sensingModeWorking();                // [센싱 모드] 동작 함수
 void alarmWorking();                      // [기상 모드] 동작 함수
 void keyInterrupt(int PUSH_TIMING);       // 물리 버튼 제어 함수(매개변수 : 전역루프에서는 300, 수면루프에서는 10 넣어야. 0.3초,1초 반응속도)
 void keyMoodLightControl();               // 물리 버튼 무드등 제어 함수
-void VELVE(bool in,bool android);         // 이하 모듈 제어(ON/OFF), 두번째 매개변수 false: 비동기 송신
+void VALVE(bool in,bool android);         // 이하 모듈 제어(ON/OFF), 두번째 매개변수 false: 비동기 송신
 void FAN(bool in,bool android);
 void HEAT(bool in,bool android);
 void setAlarmMemory(bool on);             // 알람 설정 및 알람 시각 메모리 영구저장.
@@ -108,12 +108,17 @@ void setup(){
   digitalWrite(VIBE,LOW);
 
   /* 모터 컨트롤 */
-  InitTimersSafe();
-  SetPinFrequencySafe(MOTOR_L, 20000);
+  //InitTimersSafe();
+  //SetPinFrequencySafe(MOTOR_L, 20000);
   pinMode(MOTOR_L, INPUT);  
+  //SetPinFrequencySafe(CO2VALVE_L,5000);
+  pinMode(CO2VALVE_L, INPUT);
+  pinMode(MOTOR_S,OUTPUT);
+  pinMode(CO2VALVE_S,OUTPUT);
+  
   digitalWrite(4,LOW);            // FAN 안쓰는 핀 고정값
-  digitalWrite(9,LOW);            // VELVE 안쓰는 핀 고정값
-   
+  digitalWrite(9,LOW);            // VALVE 안쓰는 핀 고정값
+  
   #if defined (__AVR_ATtiny85__)
    if (F_CPU == 16000000) clock_prescale_set(clock_div_1);
   #endif 
@@ -148,7 +153,7 @@ void setup(){
     developerMode();
   }
   Serial.println(" GoSleep is ready to operation ... ");
-  VELVE(OFF,false); 
+  VALVE(OFF,false); 
   FAN(OFF,false);
 }
 
@@ -331,8 +336,8 @@ void sleepModeWorking(){
     for(unsigned int i=0;i<SLEEP_MODE_TOTAL*M;i++){  // 수면 시나리오    0.1초에 한번 루프 돌게.  25*M
       pastTime = millis();
       
-        if(i==INIT_WIND_TIME*M)VELVE(ON,false);
-        if(i==(INIT_WIND_TIME+CO2_WIND_TIME)*M)VELVE(OFF,false);
+        if(i==INIT_WIND_TIME*M)VALVE(ON,false);
+        if(i==(INIT_WIND_TIME+CO2_WIND_TIME)*M)VALVE(OFF,false);
 
         if(i%10==0){    //수면모드 동작중 , 매 루프 수행해야 할 것들.
           sendAndroidMessage(1);
@@ -364,14 +369,14 @@ void sleepModeWorking(){
         keyInterrupt(10);
         
         if(MODE == SLEEP_MODE-1){       // 수면모드 강제 중단
-          VELVE(OFF,false); FAN(OFF,false);
+          VALVE(OFF,false); FAN(OFF,false);
           fanSpeed = save_fan_speed;
           MODE--;                       // 대기모드로
           return;
         }
         
         if(MODE == SLEEP_MODE+1){      // 수면모드 일시 중단 
-          VELVE(OFF,false); FAN(OFF,false);
+          VALVE(OFF,false); FAN(OFF,false);
           Serial.print("수면모드 일시중단 ");
           for(int j=0;;j++){
             delay(1);
@@ -388,7 +393,7 @@ void sleepModeWorking(){
                 if(INIT_WIND_TIME*M > i || (SLEEP_MODE_TOTAL-FIN_WIND_TIME)*M <i) // 중단됐던 시나리오에 알맞게 동작.
                   FAN(ON,false);
                 if(INIT_WIND_TIME*M <= i && (SLEEP_MODE_TOTAL-FIN_WIND_TIME)*M >=i)
-                  VELVE(ON,false); 
+                  VALVE(ON,false); 
                 break;
             }
           }
@@ -620,13 +625,16 @@ void parseAndroidMessage(){
             }
             user_Co2Concent = atoi(buf3);
             _printf("농도 제어 : %d\n",user_Co2Concent);
-            //user_Co2Concent = fanSpeed;
-            analogWrite(CO2VELVE_L, user_Co2Concent); 
+            analogWrite(CO2VALVE_L, 255); 
+            //pwmWrite(CO2VALVE_L,255);
+            delay(150);
+            analogWrite(CO2VALVE_L, user_Co2Concent); 
+            //pwmWrite(CO2VALVE_L,user_Co2Concent);
             memset(buf3,'\0',sizeof(buf3));
           }
           else{
-            if(Serial2.read() == '1') VELVE(ON,true);
-            else VELVE(OFF,true);
+            if(Serial2.read() == '1') VALVE(ON,true);
+            else VALVE(OFF,true);
           }
           break;
       case 'h':   // 열선 on/off 제어
@@ -708,43 +716,35 @@ void moodLedControl(int r,int g,int b){
     pixels.show();
 }
 /*-------------------------------------------------------------------------------------- 모듈 제어 함수 */
-void VELVE(bool in,bool android){
+void VALVE(bool in,bool android){
   if(in == ON){
-    Serial.println("Velve ON");   
-    analogWrite(CO2VELVE_L, user_Co2Concent);
-    digitalWrite(CO2VELVE_S, HIGH);
+    Serial.println("Valve ON");   
+    analogWrite(CO2VALVE_L, user_Co2Concent);
+    digitalWrite(CO2VALVE_S, HIGH);
+    Serial2.print("v");Serial2.println(",1");
   }
   else {
-    Serial.println("Velve OFF");
-    digitalWrite(CO2VELVE_S, LOW);
+    Serial.println("Valve OFF");
+    digitalWrite(CO2VALVE_S, LOW);
+    Serial2.print("v");Serial2.println(",0");
   }
-
-  if(!android && in){
-    Serial2.print("v");Serial2.println(",1");
-    Serial2.print("v");Serial2.println(",1");
+  /*if(!android && in){
     Serial2.print("v");Serial2.println(",1");
   }
   else if(!android && !in){
     Serial2.print("v");Serial2.println(",0");
-    Serial2.print("v");Serial2.println(",0");
-    Serial2.print("v");Serial2.println(",0");
-  }
+  }*/
 }
 void FAN(bool in,bool android){
   if(in == ON){
     Serial.println("Fan ON");
     analogWrite(MOTOR_L, fanSpeed);  
     digitalWrite(MOTOR_S, HIGH);
+    Serial2.print("f");Serial2.println(",1");
   }
   else {
     Serial.println("Fan OFF");
     digitalWrite(MOTOR_S, LOW);
-  }
-    
-  if(!android && in){
-    Serial2.print("f");Serial2.println(",1");
-  }
-  else if(!android && !in){
     Serial2.print("f");Serial2.println(",0");
   }
 }
@@ -1020,13 +1020,13 @@ void developerMode(){
           digitalWrite(MOTOR_S, HIGH); 
           //digitalWrite(4, LOW); 
 
-          analogWrite(CO2VELVE_L, 255);
-          digitalWrite(CO2VELVE_S, HIGH);
+          analogWrite(CO2VALVE_L, 255);
+          digitalWrite(CO2VALVE_S, HIGH);
           ontest = true;
         }
         else if(testcmd == '2'){
           digitalWrite(MOTOR_S, LOW); 
-          digitalWrite(CO2VELVE_S, LOW);
+          digitalWrite(CO2VALVE_S, LOW);
           ontest = false;
         }
         else if(testcmd == '3'){
@@ -1062,7 +1062,6 @@ void watchConsole(){
       set3231Date();
       get3231Date();
       Serial.println(" ");
-
     }
   }
   return 0;
