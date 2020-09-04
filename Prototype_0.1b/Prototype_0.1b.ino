@@ -11,7 +11,7 @@
 
 #define DS3231_I2C_ADDRESS 104    // RTC 모듈 주소
 
-#define DEVELOPER_MODE    0      // <------------ 1로 변경 시, 각종 기기 환경설정 가능, 일반 기기 동작은 0으로 설정.
+#define DEVELOPER_MODE    1      // <------------ 1로 변경 시, 각종 기기 환경설정 가능, 일반 기기 동작은 0으로 설정.
 
 #define DHTPIN              A0    // 온습도 아날로그
 #define INFRARED_SENSOR     A1    // 적외선 아날로그
@@ -700,6 +700,10 @@ void parseAndroidMessage(){
           }
           else
             Serial2.println("t,n");
+          /* 인터넷 시간 ~ RTC 동기화 */
+          //mobileInitTime();
+          //get3231Date();
+          //Serial.println(" ");          
           break;
     }
 
@@ -903,7 +907,6 @@ void readNFC(){
 /*-------------------------------------------------------------------------------------- 개발자 환경설정[Configuration] */
 byte seconds, minutes, hours, day, date, month, year;
 char weekDay[4];
- 
 byte tMSB, tLSB;
 float temp3231;
 
@@ -1073,9 +1076,35 @@ void set3231Date(){
   date    = (byte) ((Serial.read() - 48) *10 +  (Serial.read() - 48));
   hours   = (byte) ((Serial.read() - 48) *10 +  (Serial.read() - 48));
   minutes = (byte) ((Serial.read() - 48) *10 +  (Serial.read() - 48));
-  seconds = (byte) ((Serial.read() - 48) * 10 + (Serial.read() - 48));
+  seconds = (byte) ((Serial.read() - 48) *10 + (Serial.read() - 48));
   day     = (byte) (Serial.read() - 48);
  
+  Wire.beginTransmission(DS3231_I2C_ADDRESS);
+  Wire.write(0x00);
+  Wire.write(decToBcd(seconds));
+  Wire.write(decToBcd(minutes));
+  Wire.write(decToBcd(hours));
+  Wire.write(decToBcd(day));
+  Wire.write(decToBcd(date));
+  Wire.write(decToBcd(month));
+  Wire.write(decToBcd(year));
+  Wire.endTransmission();
+}
+
+void mobileInitTime(){
+  year    = (byte) ((Serial2.read() - 48) *10 +  (Serial2.read() - 48));
+  month   = (byte) ((Serial2.read() - 48) *10 +  (Serial2.read() - 48));
+  date    = (byte) ((Serial2.read() - 48) *10 +  (Serial2.read() - 48));
+  hours   = (byte) ((Serial2.read() - 48) *10 +  (Serial2.read() - 48));
+  minutes = (byte) ((Serial2.read() - 48) *10 +  (Serial2.read() - 48));
+  seconds = (byte) ((Serial2.read() - 48) *10 +  (Serial2.read() - 48));
+  day     = (byte) (Serial2.read() - 48);
+
+ Serial.print("20");Serial.print(year, DEC);Serial.print("/");
+ Serial.print(month, DEC);Serial.print("/");Serial.print(date, DEC);
+ Serial.print(" - ");Serial.print(hours, DEC); Serial.print(":"); 
+ Serial.print(minutes, DEC); Serial.print(":"); Serial.println(seconds, DEC);
+  
   Wire.beginTransmission(DS3231_I2C_ADDRESS);
   Wire.write(0x00);
   Wire.write(decToBcd(seconds));
@@ -1119,6 +1148,12 @@ void get3231Date(){
     case 6:strcpy(weekDay, "Fri");break;
     case 7:strcpy(weekDay, "Sat");break;
   }
+
+  Serial.print(weekDay);
+  Serial.print(", 20");Serial.print(year, DEC);Serial.print("/");
+  Serial.print(month, DEC);Serial.print("/");Serial.print(date, DEC);
+  Serial.print(" - ");Serial.print(hours, DEC); Serial.print(":"); 
+  Serial.print(minutes, DEC); Serial.print(":"); Serial.println(seconds, DEC);
 }
 
 void menu(){
