@@ -11,7 +11,7 @@
 
 #define DS3231_I2C_ADDRESS 104    // RTC 모듈 주소
 
-#define DEVELOPER_MODE    1      // <------------ 1로 변경 시, 각종 기기 환경설정 가능, 일반 기기 동작은 0으로 설정.
+#define DEVELOPER_MODE    0      // <------------ 1로 변경 시, 각종 기기 환경설정 가능, 일반 기기 동작은 0으로 설정.
 
 #define DHTPIN              A0    // 온습도 아날로그
 #define INFRARED_SENSOR     A1    // 적외선 아날로그
@@ -48,6 +48,7 @@ long int code = 0;
 short user_fanSpeed = 100, user_Co2Concent = 255;
 short alarm_fanSpeed = 255, alarm_Led_bright = 250;
 bool alarmLedTone = false; // false : warm톤   true : cool톤
+bool ANDROID_FAN_UI = false, ANDROID_VALVE_UI  = false;
 
 char c,buf2[2],buf3[3],buf_rgb[3][4],co2code[36];      // 각종 읽기 버퍼
 short bluetoothCount = 0;
@@ -108,8 +109,8 @@ void setup(){
   digitalWrite(VIBE,LOW);
 
   /* 모터 컨트롤 */
-  //InitTimersSafe();
-  //SetPinFrequencySafe(MOTOR_L, 20000);
+  InitTimersSafe();
+  SetPinFrequencySafe(MOTOR_L, 20000);
   pinMode(MOTOR_L, INPUT);  
   //SetPinFrequencySafe(CO2VALVE_L,5000);
   pinMode(CO2VALVE_L, INPUT);
@@ -478,22 +479,16 @@ void sendAndroidMessage(bool direct){     // 매개변수: 전송 주기 관계�
       float h, t;
       h = dht.readHumidity();
       t = dht.readTemperature();
-      if(isnan(h) || isnan(t))
+      if(isnan(h) || isnan(t)){
         Serial.println("Failed to read from DHT sensor!");
+        h = 0; t =0;
+      }
       else{
         h1 = h;
         t1 = t;
       }
         
-      /*if(Serial1.available()){
-        long ccc = Serial1.parseInt();
-        if(ccc*10>300 && ccc*10 <650000)
-          co2 = ccc;
-      }
-      else
-        Serial.println("Co2 Sensor Error");*/
-      co2 = co2sensing()*10;
-      
+      co2 = co2sensing()*10;   
       d = getDistance();
 
       // https://www.allaboutcircuits.com/projects/design-a-luxmeter-using-a-light-dependent-resistor/
@@ -505,7 +500,21 @@ void sendAndroidMessage(bool direct){     // 매개변수: 전송 주기 관계�
       Serial2.print(MODE);Serial2.print(",");         // 현재모드상태 송신      
       Serial2.print(co2);Serial2.print(",");       // CO2 송신 
       Serial2.print(d);Serial2.print(",");            // 거리 송신     
-      Serial2.println((int)v);                        // 조도 송신
+      Serial2.print((int)v);Serial2.print(",");       // 조도 송신
+      
+      if(ANDROID_FAN_UI){ //FAN 상태 송신
+        Serial2.print(1);
+        Serial2.print(",");  
+      }
+      else{
+        Serial2.print(0);
+        Serial2.print(",");  
+      }
+      if(ANDROID_VALVE_UI) //VALVE 상태 송신
+        Serial2.println(1);
+      else
+        Serial2.println(0);
+      
       sendTime = 0;
     }
 }
@@ -549,8 +558,10 @@ long co2sensing(){
         }
       }
   }
-  else
+  else{
       Serial.println("Co2 Sensor Error");
+      return 0;
+  }
   return past;    
 }
 /*-------------------------------------------------------------------------------------- 안드로이드 실제 수신 메시지(RAW) 출력 */
@@ -725,12 +736,14 @@ void VALVE(bool in,bool android){
     Serial.println("Valve ON");   
     analogWrite(CO2VALVE_L, user_Co2Concent);
     digitalWrite(CO2VALVE_S, HIGH);
-    Serial2.print("v");Serial2.println(",1");
+    //Serial2.print("v");Serial2.println(",1");
+    ANDROID_VALVE_UI  = true;
   }
   else {
     Serial.println("Valve OFF");
     digitalWrite(CO2VALVE_S, LOW);
-    Serial2.print("v");Serial2.println(",0");
+    //Serial2.print("v");Serial2.println(",0");
+    ANDROID_VALVE_UI  = false;
   }
   /*if(!android && in){
     Serial2.print("v");Serial2.println(",1");
@@ -744,12 +757,14 @@ void FAN(bool in,bool android){
     Serial.println("Fan ON");
     analogWrite(MOTOR_L, fanSpeed);  
     digitalWrite(MOTOR_S, HIGH);
-    Serial2.print("f");Serial2.println(",1");
+    //Serial2.print("f");Serial2.println(",1");
+    ANDROID_FAN_UI = true;
   }
   else {
     Serial.println("Fan OFF");
     digitalWrite(MOTOR_S, LOW);
-    Serial2.print("f");Serial2.println(",0");
+    //Serial2.print("f");Serial2.println(",0");
+    ANDROID_FAN_UI = false;
   }
 }
 void HEAT(bool in,bool android){
@@ -757,10 +772,10 @@ void HEAT(bool in,bool android){
   else Serial.println("Heat OFF"); 
 
   if(!android && in){
-    Serial2.print("h");Serial2.println(",1");
+    //Serial2.print("h");Serial2.println(",1");
   }
   else if(!android && !in){
-    Serial2.print("h");Serial2.println(",0");
+    //Serial2.print("h");Serial2.println(",0");
  }
 }
 
@@ -1149,11 +1164,11 @@ void get3231Date(){
     case 7:strcpy(weekDay, "Sat");break;
   }
 
-  Serial.print(weekDay);
+  /*Serial.print(weekDay);
   Serial.print(", 20");Serial.print(year, DEC);Serial.print("/");
   Serial.print(month, DEC);Serial.print("/");Serial.print(date, DEC);
   Serial.print(" - ");Serial.print(hours, DEC); Serial.print(":"); 
-  Serial.print(minutes, DEC); Serial.print(":"); Serial.println(seconds, DEC);
+  Serial.print(minutes, DEC); Serial.print(":"); Serial.println(seconds, DEC);*/
 }
 
 void menu(){
