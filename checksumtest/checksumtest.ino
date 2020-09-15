@@ -11,7 +11,11 @@ void loop() {
   // put your main code here, to run repeatedly:
   while(Serial2.available()){
     char c = Serial2.read();
-    Serial.print(c);Serial.print(" ");
+    if(c == 'r')
+      Serial.print(c);
+    else
+      Serial.print((int)c);
+    Serial.print(",");
   }
   Serial.println("");
   delay(1000);

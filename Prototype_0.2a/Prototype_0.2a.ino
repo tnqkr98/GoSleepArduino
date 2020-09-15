@@ -7,7 +7,6 @@
 #include <EEPROM.h>
 #include <SPI.h>
 #include <MFRC522.h>
-#include <PWM.h>
 
 #define DS3231_I2C_ADDRESS 104    // RTC 모듈 주소
 
@@ -23,14 +22,14 @@
 #define DIST_UPPER       30     // 거리 최대
 #define NUM_PIXELS       12     // 네오픽셀 LED 개수 
 
-#define SLEEP_MODE_TOTAL 22    // 수면모드 진행시간(A분 = B+C+D  수식에 맞게 설정할것)  defalut : 25 분
-#define INIT_WIND_TIME   2     // 초기 B분간 팬속도 증가  default : 5 분
-#define CO2_WIND_TIME    15    // C분간 Co2 분 사        default : 15 분
-#define FIN_WIND_TIME    5     // D분간 팬속도 감소       default :  5 분
+#define SLEEP_MODE_TOTAL 22      // 수면모드 진행시간(A분 = B+C+D  수식에 맞게 설정할것)  defalut : 22 분
+#define INIT_WIND_TIME    2      // 초기 B분간 팬속도 증가  default : 2 분
+#define CO2_WIND_TIME    15      // C분간 Co2 분 사        default : 15 분
+#define FIN_WIND_TIME     5      // D분간 팬속도 감소       default :  5 분
 
-#define ALARM_LED_TIME   15     // 기상모드 LED 시작x분전(x>=y)    default : 40분
-#define ALARM_FAN_TIME   15     // 기상모드 FAN 시작y분전          default : 15분
-#define LONG_SLEEP       70     // 알람방식의 전환 시간(70<수면시간 : 점진적기상, 70>수면시간 : 즉각기상)
+#define ALARM_LED_TIME   15      // 기상모드 LED 시작x분전(x>=y)    default : 15분
+#define ALARM_FAN_TIME   15      // 기상모드 FAN 시작y분전          default : 15분
+#define LONG_SLEEP       70      // 알람방식의 전환 시간(70<수면시간 : 점진적기상, 70>수면시간 : 즉각기상)
 
 enum{MOTOR_L=2,MOTOR_S=3,CO2VALVE_L=10,CO2VALVE_S=8,LED_PIN=26,NEXT_BT=30,PREV_BT=28,MOOD=24,VIBE=32,SPEAKER=22};  // 핀 번호
 enum{SS_PIN=53,RST_PIN=5};      // RFID(NFC관련) 핀번호
@@ -112,10 +111,10 @@ void setup(){
   digitalWrite(VIBE,LOW);
 
   /* 모터 컨트롤 */
-  InitTimersSafe();
-  SetPinFrequencySafe(MOTOR_L, 20000);
+  TCCR2B = (TCCR2B & 0xF8) | 0x01 ;
+  TCCR3B = (TCCR3B & 0xF8) | 0x01 ;
+  
   pinMode(MOTOR_L, INPUT);  
-  //SetPinFrequencySafe(CO2VALVE_L,5000);
   pinMode(CO2VALVE_L, INPUT);
   pinMode(MOTOR_S,OUTPUT);
   pinMode(CO2VALVE_S,OUTPUT);
@@ -140,7 +139,7 @@ void setup(){
      time[0] = address[1];
      time[1] = address[2];
   }
-  Serial.println("====================================================================================================");
+  Serial.println("====================================================================================================================");
   if(address[3] != 0){
     code += (int)address[3] * 1000000;
     code += (int)address[4] * 10000;
@@ -351,9 +350,7 @@ void sleepModeWorking(){
         if(i<INIT_WIND_TIME*M && i%10==0){
             fanSpeed = map(i/10,0,60*INIT_WIND_TIME,40,user_fanSpeed);    //속도 조절은 1초 단위. (즉 10루프당 1회 속도조절)  여기서 255가 사용자가 설정한 값이여야.
             _printf("팬속도 증가 [속도 값 %3d]\n",fanSpeed);
-            //analogWrite(MOTOR_S, fanSpeed);
             analogWrite(MOTOR_L, fanSpeed);
-            //pwmWrite(MOTOR_L,fanSpeed);
         }
         else if(i<(INIT_WIND_TIME+CO2_WIND_TIME)*M){
           if(i%10==0)
@@ -362,9 +359,7 @@ void sleepModeWorking(){
         else if(i<SLEEP_MODE_TOTAL*M && i%10 == 0){
           fanSpeed = map(i/10,60*(INIT_WIND_TIME+CO2_WIND_TIME),60*SLEEP_MODE_TOTAL,user_fanSpeed,40);  // 최저속도 20으로(소음때매)
           _printf("팬속도 감소 [속도 값 %3d]\n",fanSpeed);
-          //analogWrite(MOTOR_S, fanSpeed);
           analogWrite(MOTOR_L, fanSpeed);
-          //pwmWrite(MOTOR_L,fanSpeed);
         }
 
         if(i==SLEEP_MODE_TOTAL*M - 1) FAN(OFF,false);
@@ -639,11 +634,7 @@ void parseAndroidMessage(){
             }
             user_Co2Concent = atoi(buf3);
             _printf("농도 제어 : %d\n",user_Co2Concent);
-            analogWrite(CO2VALVE_L, 255); 
-            //pwmWrite(CO2VALVE_L,255);
-            delay(150);
             analogWrite(CO2VALVE_L, user_Co2Concent); 
-            //pwmWrite(CO2VALVE_L,user_Co2Concent);
             memset(buf3,'\0',sizeof(buf3));
           }
           else{
@@ -714,9 +705,9 @@ void parseAndroidMessage(){
           }
           else
             Serial2.println("t,n");
+            
           /* 인터넷 시간 ~ RTC 동기화 */
-          //mobileInitTime();
-          //get3231Date();
+          mobileSyncTime();
           //Serial.println(" ");          
           break;
     }
@@ -993,26 +984,7 @@ void developerMode(){
       _printf("\n<<<< 제품 코드 설정 종료 >>>>\n");
       menu();
     }
-    else if(cmd.charAt(0) == '3'){      // RCT 시간 설정
-        _printf("\n<<<<                        RCT 모듈 시간 설정(종료 명령 : e)                            >>>>");
-        _printf("\n<<<< T(설정명령) + 년(00~99) + 월(01~12) + 일(01~31) + 시(00~23) + 분(00~59) + 초(00~59) >>>>");
-        _printf("\n<<<<                      + 요일(1~7, 일1 월2 화3 수4 목5 금6 토7)                       >>>>");
-        _printf("\n<<<<           예: T1605091300002 (2016년 5월 9일 13시 00분 00초 월요일)                 >>>>\n\n");
-        while(1){
-          if (Serial.available()) 
-            if (Serial.peek() == 'e')
-              break;
-          watchConsole();
-          get3231Date();
-          printTime();
-          delay(1000);
-        }
-        _printf("\n<<<< 시간 설정 종료 >>>>\n");
-        Serial.read();
-        Serial.read();
-        menu();
-    }
-    else if(cmd.charAt(0) == '5'){      // 팬, 밸브 테스트
+    else if(cmd.charAt(0) == '4'){      // 팬, 밸브 테스트
       char testcmd;
       bool ontest = false;
       _printf("\n<<<<                         팬, 밸브 테스트                             >>>>");
@@ -1054,7 +1026,7 @@ void developerMode(){
       Serial.println("<<<< 팬, 밸브 테스트 종료 >>>>");
       menu();
     }
-    else if(cmd.charAt(0) == '6'){     // 관리자 모드 종료 후 고슬립 동작 시작.
+    else if(cmd.charAt(0) == '5'){     // 관리자 모드 종료 후 고슬립 동작 시작.
       return;
     }
   }
@@ -1072,109 +1044,48 @@ String readCommand(){
   return cmd;
 }
 
-byte decToBcd(byte val){return ( (val/10*16) + (val%10) );}
-void watchConsole(){
-  if (Serial.available()) {     
-    if (Serial.read() == 84) {   
-      set3231Date();
-      get3231Date();
-      Serial.println(" ");
-    }
+void mobileSyncTime(){
+  int packet[7],checksum=0;
+  for(int i=0;i<7;i++){
+    char c = Serial2.read();
+    packet[i] = (int)c;
   }
-  return 0;
-}
+  Serial.print(" ㄴ 안드로이드와 인터넷 시간 동기화 ~ 20");
+  Serial.print(packet[0]);Serial.print("/");
+  Serial.print(packet[1]);Serial.print("/");
+  Serial.print(packet[2]);Serial.print(" ");
+  Serial.print(packet[3]);Serial.print(":");
+  Serial.print(packet[4]);Serial.print(":");
+  Serial.print(packet[5]);Serial.print(" ");
+  Serial.print(", Checksum(Android) : ");Serial.print(packet[6]);
 
-void set3231Date(){
-  year    = (byte) ((Serial.read() - 48) *10 +  (Serial.read() - 48));
-  month   = (byte) ((Serial.read() - 48) *10 +  (Serial.read() - 48));
-  date    = (byte) ((Serial.read() - 48) *10 +  (Serial.read() - 48));
-  hours   = (byte) ((Serial.read() - 48) *10 +  (Serial.read() - 48));
-  minutes = (byte) ((Serial.read() - 48) *10 +  (Serial.read() - 48));
-  seconds = (byte) ((Serial.read() - 48) *10 + (Serial.read() - 48));
-  day     = (byte) (Serial.read() - 48);
- 
-  Wire.beginTransmission(DS3231_I2C_ADDRESS);
-  Wire.write(0x00);
-  Wire.write(decToBcd(seconds));
-  Wire.write(decToBcd(minutes));
-  Wire.write(decToBcd(hours));
-  Wire.write(decToBcd(day));
-  Wire.write(decToBcd(date));
-  Wire.write(decToBcd(month));
-  Wire.write(decToBcd(year));
-  Wire.endTransmission();
-}
-
-void mobileInitTime(){
-  year    = (byte) ((Serial2.read() - 48) *10 +  (Serial2.read() - 48));
-  month   = (byte) ((Serial2.read() - 48) *10 +  (Serial2.read() - 48));
-  date    = (byte) ((Serial2.read() - 48) *10 +  (Serial2.read() - 48));
-  hours   = (byte) ((Serial2.read() - 48) *10 +  (Serial2.read() - 48));
-  minutes = (byte) ((Serial2.read() - 48) *10 +  (Serial2.read() - 48));
-  seconds = (byte) ((Serial2.read() - 48) *10 +  (Serial2.read() - 48));
-  day     = (byte) (Serial2.read() - 48);
-
- Serial.print("20");Serial.print(year, DEC);Serial.print("/");
- Serial.print(month, DEC);Serial.print("/");Serial.print(date, DEC);
- Serial.print(" - ");Serial.print(hours, DEC); Serial.print(":"); 
- Serial.print(minutes, DEC); Serial.print(":"); Serial.println(seconds, DEC);
-  
-  Wire.beginTransmission(DS3231_I2C_ADDRESS);
-  Wire.write(0x00);
-  Wire.write(decToBcd(seconds));
-  Wire.write(decToBcd(minutes));
-  Wire.write(decToBcd(hours));
-  Wire.write(decToBcd(day));
-  Wire.write(decToBcd(date));
-  Wire.write(decToBcd(month));
-  Wire.write(decToBcd(year));
-  Wire.endTransmission();
-}
- 
-void get3231Date(){
-  Wire.beginTransmission(DS3231_I2C_ADDRESS);
-  Wire.write(0x00);
-  Wire.endTransmission();
-  Wire.requestFrom(DS3231_I2C_ADDRESS, 7);
-  if(Wire.available()) {
-    seconds = Wire.read(); // get seconds
-    minutes = Wire.read(); // get minutes
-    hours   = Wire.read();   // get hours
-    day     = Wire.read();
-    date    = Wire.read();
-    month   = Wire.read(); //temp month
-    year    = Wire.read();
-       
-    seconds = (((seconds & B11110000)>>4)*10 + (seconds & B00001111)); // convert BCD to decimal
-    minutes = (((minutes & B11110000)>>4)*10 + (minutes & B00001111)); // convert BCD to decimal
-    hours   = (((hours & B00110000)>>4)*10 + (hours & B00001111)); // convert BCD to decimal (assume 24 hour mode)
-    day     = (day & B00000111); // 1-7
-    date    = (((date & B00110000)>>4)*10 + (date & B00001111)); // 1-31
-    month   = (((month & B00010000)>>4)*10 + (month & B00001111)); //msb7 is century overflow
-    year    = (((year & B11110000)>>4)*10 + (year & B00001111));
+  // checksum
+  for(int i=0;i<6;i++){
+     checksum += packet[i]/10;
+     checksum += packet[i]%10;
   }
-  switch (day) {
-    case 1:strcpy(weekDay, "Sun");break;
-    case 2:strcpy(weekDay, "Mon");break;
-    case 3:strcpy(weekDay, "Tue");break;
-    case 4:strcpy(weekDay, "Wed");break;
-    case 5:strcpy(weekDay, "Thu");break;
-    case 6:strcpy(weekDay, "Fri");break;
-    case 7:strcpy(weekDay, "Sat");break;
+  Serial.print(", Checksum(Arduino) : ");Serial.print(checksum);
+  if(checksum == packet[6]) {
+    Serial.println(" ChecksumTest : 오류없음");
+    rtc.adjust(DateTime(2000+packet[0],packet[1] ,packet[2],packet[3],packet[4],packet[5]));
+  }
+  else {
+    Serial.println(" ChecksumTest : 오류있음, 재전송 요청");
+    Serial2.println("r");
   }
 }
 
 void printTime(){
-  char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
+  char daysOfTheWeek[7][12] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
   DateTime now = rtc.now();
-
+  Serial.print(" ");
   Serial.print(now.year(), DEC);Serial.print('/');
   Serial.print(now.month(), DEC);Serial.print('/');
-  Serial.print(now.day(), DEC);Serial.print(" (");
-  Serial.print(daysOfTheWeek[now.dayOfTheWeek()]);Serial.print(") ");
+  Serial.print(now.day(), DEC);Serial.print(" ");
+  Serial.print(daysOfTheWeek[now.dayOfTheWeek()]);Serial.print(" ");
   Serial.print(now.hour(), DEC);Serial.print(':');
   Serial.print(now.minute(), DEC);Serial.print(':');
-  Serial.print(now.second(), DEC);Serial.println();
+  Serial.print(now.second(), DEC);Serial.print(' ');
 }
 
 void menu(){
@@ -1185,15 +1096,15 @@ void menu(){
   _printf("<<<<                                                   >>>>\n");
   _printf("       1. 블루투스 설정\n");
   _printf("       2. 제품 코드 설정\n");
-  _printf("       3. 시간(RTC) 설정\n");
-  _printf("       4. (미개발)장착된 CO2 코드 설정\n");
-  _printf("       5. 팬, 밸브 테스트 (최대 출력으로 동작)\n");
-  _printf("       6. 종료 후 고슬립 작동 시작\n");
+  _printf("       3. (미개발)장착된 CO2 코드 설정\n");
+  _printf("       4. 팬, 밸브 테스트 (최대 출력으로 동작)\n");
+  _printf("       5. 종료 후 고슬립 작동 시작\n");
 }
 /*-------------------------------------------------------------------------------------- 로그 출력용 함수 */
 void printLog(bool direct){
   static int printT = 0;
   if((printT++)==500 || direct){
+       printTime();
        switch(MODE){
           case STOP_MODE:Serial.print(" 현재 상태 : 절전 모드 ");break;
           case WAIT_MODE:Serial.print(" 현재 상태 : 대기 모드 ");break;
@@ -1213,9 +1124,6 @@ void printLog(bool direct){
             Serial.print(" | 알람 방식 : 즉각 기상" );
       }
       Serial.println("");
-      Serial.print("   >> 제품 시간 : ");
-      get3231Date();
-      printTime();
       printT = 0;
   }
 }
