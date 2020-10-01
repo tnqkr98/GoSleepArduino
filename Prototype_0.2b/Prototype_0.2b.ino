@@ -35,7 +35,7 @@
 
 #define ALARM_LED_TIME   15      // 기상모드 LED 시작x분전(x>=y)    default : 15분
 #define ALARM_FAN_TIME   15      // 기상모드 FAN 시작y분전          default : 15분
-#define LONG_SLEEP       70      // 알람방식의 전환 시간(70<수면시간 : 점진적기상, 70>수면시간 : 즉각기상)
+#define LONG_SLEEP       40      // 알람방식의 전환 시간(70<수면시간 : 점진적기상, 70>수면시간 : 즉각기상)
 
 enum{MOTOR_L=2,MOTOR_S=3,CO2VALVE_L=10,CO2VALVE_S=8,LED_PIN=26,NEXT_BT=30,PREV_BT=28,MOOD=24,VIBE=32,SPEAKER=22};  // 핀 번호
 enum{SS_PIN=53,RST_PIN=5};      // RFID(NFC관련) 핀번호
