@@ -28,7 +28,7 @@
 #define DIST_UPPER       30     // 거리 최대
 #define NUM_PIXELS       19     // 네오픽셀 LED 개수 
 
-#define SLEEP_MODE_TOTAL 22      // 수면모드 진행시간(A분 = B+C+D  수식에 맞;게 설정할것)  defalut : 22 분
+#define SLEEP_MODE_TOTAL 22      // 수면모드 진행시간(A분 = B+C+D  수식에 맞게 설정할것)  defalut : 22 분
 #define INIT_WIND_TIME    2      // 초기 B분간 팬속도 증가  default : 2 분
 #define CO2_WIND_TIME    15      // C분간 Co2 분 사        default : 15 분
 #define FIN_WIND_TIME     5      // D분간 팬속도 감소       default :  5 분
@@ -45,7 +45,7 @@ DHT dht(DHTPIN, DHT11);
 RTC_DS3231 rtc;
 Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUM_PIXELS,LED_PIN, NEO_GRB + NEO_KHZ800);
 
-short MODE = 2, fanSpeed = 100, brightness = 128;    // 제품 상태
+short MODE = 2, fanSpeed = 115, brightness = 128;    // 제품 상태
 short global_mood = 1, alarmType = 1;   // type = 1 : 40분 점진적 기상,   type = 2 : 즉각 기상 (70분미만 수면시)
 long int code = 0;
 
@@ -76,9 +76,9 @@ void sensingModeWorking();                // [센싱 모드] 동작 함수
 void alarmWorking();                      // [기상 모드] 동작 함수
 void keyInterrupt(int PUSH_TIMING);       // 물리 버튼 제어 함수(매개변수 : 전역루프에서는 300, 수면루프에서는 10 넣어야. 0.3초,1초 반응속도)
 void keyMoodLightControl();               // 물리 버튼 무드등 제어 함수
-void VALVE(bool in,bool android);         // 이하 모듈 제어(ON/OFF), 두번째 매개변수 false: 비동기 송신
-void FAN(bool in,bool android);
-void HEAT(bool in,bool android);
+void VALVE(bool in);                      // 이하 모듈 제어(ON/OFF), 두번째 매개변수 false: 비동기 송신
+void FAN(bool in);
+void HEAT(bool in);
 void setAlarmMemory(bool on);             // 알람 설정 및 알람 시각 메모리 영구저장.
 void readNFC();                           // RFID 이용한 NFC 리더
 bool rtcAvailabe();                       // RTC 모듈 예외처리
@@ -162,8 +162,8 @@ void setup(){
     developerMode();
   }
   Serial.println(" GoSleep is ready to operation ... ");
-  VALVE(OFF,false); 
-  FAN(OFF,false);
+  VALVE(OFF); 
+  FAN(OFF);
 }
 
 void loop(){
@@ -250,7 +250,7 @@ void modeControl(){
               pixels.fill(pixels.Color(255, 255, 255), 0, NUM_PIXELS); 
               pixels.setBrightness(255);
               pixels.show();
-              FAN(ON,false);
+              FAN(ON);
               fanSpeed = 255;
               analogWrite(MOTOR_L, fanSpeed);     
               MODE = WAKE_MODE;               // 즉각 기상
@@ -285,7 +285,7 @@ void modeControl(){
 
     if(MODE > WAKE_MODE){
        MODE = WAIT_MODE;
-       FAN(OFF,false);
+       FAN(OFF);
     }
 }
 /*-------------------------------------------------------------------------------------- [거리 측정 모드] 동작 함수 */
@@ -339,49 +339,54 @@ void sleepModeWorking(){
     pixels.show();
 
     fanSpeed = 0;   // save_fan_speed 를 사용자가 설정한 속도로 쓸것.
-    FAN(ON,false);
+    FAN(ON);
     
     int M = 600; //0.1초 X 600 = 1분
     for(unsigned int i=0;i<SLEEP_MODE_TOTAL*M;i++){  // 수면 시나리오    0.1초에 한번 루프 돌게.  25*M
       pastTime = millis();
       
-        if(i==INIT_WIND_TIME*M)VALVE(ON,false);
-        if(i==(INIT_WIND_TIME+CO2_WIND_TIME)*M)VALVE(OFF,false);
+        if(i==INIT_WIND_TIME*M)VALVE(ON);
+        if(i==(INIT_WIND_TIME+CO2_WIND_TIME)*M)VALVE(OFF);
 
         if(i%10==0){    //수면모드 동작중 , 매 루프 수행해야 할 것들.
           sendAndroidMessage(1);
           _printf("수면 모드 [%5d 초] 진행중 >> 현재 수행 동작 : ",i/10);
         }
  
-        if(i<INIT_WIND_TIME*M && i%10==0){
+        if(i<INIT_WIND_TIME*M && i%10==0)        // FAN 속도 증가 단계
+        { 
             fanSpeed = map(i/10,0,60*INIT_WIND_TIME,40,user_fanSpeed);    //속도 조절은 1초 단위. (즉 10루프당 1회 속도조절)  여기서 255가 사용자가 설정한 값이여야.
             _printf("팬속도 증가 [속도 값 %3d]\n",fanSpeed);
             analogWrite(MOTOR_L, fanSpeed);
         }
-        else if(i<(INIT_WIND_TIME+CO2_WIND_TIME)*M){
-          if(i%10==0)
-            Serial.println("수면 가스 분사 중..");
+        else if(i<(INIT_WIND_TIME+CO2_WIND_TIME)*M)   // FAN 최고 속도, CO2 분사 단계
+        {
+          if(i%10==0)Serial.println("수면 가스 분사 중..");
+          if(emergency())VALVE(OFF);
+          else VALVE(ON);
+            
         }
-        else if(i<SLEEP_MODE_TOTAL*M && i%10 == 0){
+        else if(i<SLEEP_MODE_TOTAL*M && i%10 == 0)  // FAN 속도 감소 단계
+        { 
           fanSpeed = map(i/10,60*(INIT_WIND_TIME+CO2_WIND_TIME),60*SLEEP_MODE_TOTAL,user_fanSpeed,40);  // 최저속도 20으로(소음때매)
           _printf("팬속도 감소 [속도 값 %3d]\n",fanSpeed);
           analogWrite(MOTOR_L, fanSpeed);
         }
 
-        if(i==SLEEP_MODE_TOTAL*M - 1) FAN(OFF,false);
+        if(i==SLEEP_MODE_TOTAL*M - 1) FAN(OFF);
 
         parseAndroidMessage();          // 명령 처리
         keyInterrupt(10);
         
         if(MODE == SLEEP_MODE-1){       // 수면모드 강제 중단
-          VALVE(OFF,false); FAN(OFF,false);
+          VALVE(OFF); FAN(OFF);
           fanSpeed = save_fan_speed;
           MODE--;                       // 대기모드로
           return;
         }
         
         if(MODE == SLEEP_MODE+1){      // 수면모드 일시 중단 
-          VALVE(OFF,false); FAN(OFF,false);
+          VALVE(OFF); FAN(OFF);
           Serial.print("수면모드 일시중단 ");
           for(int j=0;;j++){
             delay(1);
@@ -396,9 +401,9 @@ void sleepModeWorking(){
                 MODE = SLEEP_MODE;
                 Serial.println("");
                 if(INIT_WIND_TIME*M > i || (SLEEP_MODE_TOTAL-FIN_WIND_TIME)*M <i) // 중단됐던 시나리오에 알맞게 동작.
-                  FAN(ON,false);
+                  FAN(ON);
                 if(INIT_WIND_TIME*M <= i && (SLEEP_MODE_TOTAL-FIN_WIND_TIME)*M >=i)
-                  VALVE(ON,false); 
+                  VALVE(ON); 
                 break;
             }
           }
@@ -408,6 +413,17 @@ void sleepModeWorking(){
           delay(1); 
     }
     MODE++;
+}
+/*-------------------------------------------------------------------------------------- 비상 상태 로직 */
+bool emergency(){
+  static int count = 0;
+  int co2 = co2sensing();
+  
+  if(co2>200000)count++;
+  else count = 0;
+  
+  if(count >= 50)return true;
+  else return false;
 }
 
 /*-------------------------------------------------------------------------------------- [센싱 모드] 동작 함수 */
@@ -426,7 +442,7 @@ void alarmWorking(){
     pixels.show();
 
     int M = 600; //0.1초 X 600 = 1분
-    FAN(ON,false);
+    FAN(ON);
     for(int i=0;i<=ALARM_LED_TIME*M;i++){
       pastTime = millis();
 
@@ -448,7 +464,7 @@ void alarmWorking(){
 
       if(MODE > WAKE_MODE){               // 사용자가 다음 누를 시
           MODE = WAIT_MODE;               // 알람 종료.
-          FAN(OFF,false); 
+          FAN(OFF); 
           pixels.fill(pixels.Color(255, 255, 255), 0, NUM_PIXELS);
           pixels.setBrightness(0);
           pixels.show();
@@ -492,7 +508,7 @@ void sendAndroidMessage(bool direct){     // 매개변수: 전송 주기 관계�
         t1 = t;
       }
         
-      co2 = co2sensing()*10;   
+      co2 = co2sensing();   
       d = getDistance();
 
       // https://www.allaboutcircuits.com/projects/design-a-luxmeter-using-a-light-dependent-resistor/
@@ -559,12 +575,12 @@ long co2sensing(){
 
         if(size_pick != cur_str.length()){
           err_count++;
-          return past;
+          return past*10;
         }
         else{
           err_count = 0;
           past = current;
-          return current;
+          return current*10;
         }
       }
   }
@@ -572,7 +588,7 @@ long co2sensing(){
       Serial.println("Co2 Sensor Error");
       return 0;
   }
-  return past;    
+  return past*10;    
 }
 /*-------------------------------------------------------------------------------------- 안드로이드 실제 수신 메시지(RAW) 출력 */
 void rawMessage(){
@@ -650,13 +666,13 @@ void parseAndroidMessage(){
             memset(buf3,'\0',sizeof(buf3));
           }
           else{
-            if(Serial2.read() == '1') VALVE(ON,true);
-            else VALVE(OFF,true);
+            if(Serial2.read() == '1') VALVE(ON);
+            else VALVE(OFF);
           }
           break;
       case 'h':   // 열선 on/off 제어
-          if(Serial2.read() == '1') HEAT(ON,true);
-          else HEAT(OFF,true);
+          if(Serial2.read() == '1') HEAT(ON);
+          else HEAT(OFF);
           break;
       case 'f':   // 팬 속도 설정
           if(Serial2.peek() == 's'){
@@ -672,8 +688,8 @@ void parseAndroidMessage(){
             memset(buf3,'\0',sizeof(buf3));
           }
           else // 팬 on/off 제어
-            if(Serial2.read() == '1') FAN(ON,true);
-            else FAN(OFF,true);
+            if(Serial2.read() == '1') FAN(ON);
+            else FAN(OFF);
           break;
       case 'z':
           Serial.println("CO2 영점 조절");
@@ -737,52 +753,40 @@ void moodLedControl(int r,int g,int b){
     pixels.show();
 }
 /*-------------------------------------------------------------------------------------- 모듈 제어 함수 */
-void VALVE(bool in,bool android){
+void VALVE(bool in){
   if(in == ON){
     Serial.println("Valve ON");   
     analogWrite(CO2VALVE_L, user_Co2Concent);
     digitalWrite(CO2VALVE_S, HIGH);
-    //Serial2.print("v");Serial2.println(",1");
     ANDROID_VALVE_UI  = true;
   }
   else {
     Serial.println("Valve OFF");
     digitalWrite(CO2VALVE_S, LOW);
-    //Serial2.print("v");Serial2.println(",0");
     ANDROID_VALVE_UI  = false;
   }
-  /*if(!android && in){
-    Serial2.print("v");Serial2.println(",1");
-  }
-  else if(!android && !in){
-    Serial2.print("v");Serial2.println(",0");
-  }*/
 }
-void FAN(bool in,bool android){
+
+void FAN(bool in){
   if(in == ON){
     Serial.println("Fan ON");
     analogWrite(MOTOR_L, fanSpeed);  
     digitalWrite(MOTOR_S, HIGH);
-    //Serial2.print("f");Serial2.println(",1");
     ANDROID_FAN_UI = true;
   }
   else {
     Serial.println("Fan OFF");
     digitalWrite(MOTOR_S, LOW);
-    //Serial2.print("f");Serial2.println(",0");
     ANDROID_FAN_UI = false;
   }
 }
-void HEAT(bool in,bool android){
+
+void HEAT(bool in){
   if(in == ON)Serial.println("Heat ON");
   else Serial.println("Heat OFF"); 
 
-  if(!android && in){
-    //Serial2.print("h");Serial2.println(",1");
-  }
-  else if(!android && !in){
-    //Serial2.print("h");Serial2.println(",0");
- }
+  //Serial2.print("h");Serial2.println(",1");
+  //Serial2.print("h");Serial2.println(",0");
 }
 
 void VIBE_CALL(){
