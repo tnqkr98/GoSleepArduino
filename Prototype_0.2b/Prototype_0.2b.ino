@@ -1,7 +1,7 @@
 /* 
  *   프로그램명 : Gosleep Prototype 0.2b
  *   작성자 : 박동한
- *   최종 수정일 : 2020.09.25
+ *   최종 수정일 : 2020.10.14
  */
 
 #include "HCMotor.h"
@@ -28,10 +28,10 @@
 #define DIST_UPPER       30     // 거리 최대
 #define NUM_PIXELS       19     // 네오픽셀 LED 개수 
 
-#define SLEEP_MODE_TOTAL 22      // 수면모드 진행시간(A분 = B+C+D  수식에 맞게 설정할것)  defalut : 22 분
-#define INIT_WIND_TIME    2      // 초기 B분간 팬속도 증가  default : 2 분
-#define CO2_WIND_TIME    15      // C분간 Co2 분 사        default : 15 분
-#define FIN_WIND_TIME     5      // D분간 팬속도 감소       default :  5 분
+#define SLEEP_MODE_TOTAL  3      // 수면모드 진행시간(A분 = B+C+D  수식에 맞게 설정할것)  defalut : 22 분
+#define INIT_WIND_TIME    1      // 초기 B분간 팬속도 증가  default : 2 분
+#define CO2_WIND_TIME     1      // C분간 Co2 분 사        default : 15 분
+#define FIN_WIND_TIME     1      // D분간 팬속도 감소       default :  5 분
 
 #define ALARM_LED_TIME   15      // 기상모드 LED 시작x분전(x>=y)    default : 15분
 #define ALARM_FAN_TIME   15      // 기상모드 FAN 시작y분전          default : 15분
@@ -359,12 +359,14 @@ void sleepModeWorking(){
             _printf("팬속도 증가 [속도 값 %3d]\n",fanSpeed);
             analogWrite(MOTOR_L, fanSpeed);
         }
-        else if(i<(INIT_WIND_TIME+CO2_WIND_TIME)*M)   // FAN 최고 속도, CO2 분사 단계
+        else if(i<(INIT_WIND_TIME+CO2_WIND_TIME)*M && i%10==0)   // FAN 최고 속도, CO2 분사 단계
         {
-          if(i%10==0)Serial.println("수면 가스 분사 중..");
-          if(emergency())VALVE(OFF);
-          else VALVE(ON);
-            
+          Serial.println("수면 가스 분사 중..");   
+          if(emergencyCheck()){
+            Serial.println(" └ 농도 200,000 ppm 초과 비상모드 작동 "); 
+            VALVE(OFF);
+          }
+          else VALVE(ON);  
         }
         else if(i<SLEEP_MODE_TOTAL*M && i%10 == 0)  // FAN 속도 감소 단계
         { 
@@ -415,14 +417,19 @@ void sleepModeWorking(){
     MODE++;
 }
 /*-------------------------------------------------------------------------------------- 비상 상태 로직 */
-bool emergency(){
+bool emergencyCheck(){
   static int count = 0;
-  int co2 = co2sensing();
+  long co2 = co2sensing();
   
-  if(co2>200000)count++;
-  else count = 0;
+  if(co2>200000)
+    count++;
+  else 
+    count = 0;
+
+  //test log
+  //Serial.print(" ");Serial.print(co2);Serial.print(" ");Serial.print(count);Serial.print(" ");
   
-  if(count >= 50)return true;
+  if(count >= 5)return true;
   else return false;
 }
 
