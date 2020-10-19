@@ -28,10 +28,10 @@
 #define DIST_UPPER       30     // 거리 최대
 #define NUM_PIXELS       19     // 네오픽셀 LED 개수 
 
-#define SLEEP_MODE_TOTAL  3      // 수면모드 진행시간(A분 = B+C+D  수식에 맞게 설정할것)  defalut : 22 분
-#define INIT_WIND_TIME    1      // 초기 B분간 팬속도 증가  default : 2 분
-#define CO2_WIND_TIME     1      // C분간 Co2 분 사        default : 15 분
-#define FIN_WIND_TIME     1      // D분간 팬속도 감소       default :  5 분
+#define SLEEP_MODE_TOTAL 22      // 수면모드 진행시간(A분 = B+C+D  수식에 맞게 설정할것)  defalut : 22 분
+#define INIT_WIND_TIME    2      // 초기 B분간 팬속도 증가  default : 2 분
+#define CO2_WIND_TIME    15      // C분간 Co2 분 사        default : 15 분
+#define FIN_WIND_TIME     5      // D분간 팬속도 감소       default :  5 분
 
 #define ALARM_LED_TIME   15      // 기상모드 LED 시작x분전(x>=y)    default : 15분
 #define ALARM_FAN_TIME   15      // 기상모드 FAN 시작y분전          default : 15분
@@ -313,8 +313,7 @@ void sleepModeWorking(){
 
         if(i%10==0){    //수면모드 동작중 , 매 루프 수행해야 할 것들. 
           _printf("수면 모드 [%5d 초] 진행중 >> 현재 수행 동작 : ",i/10);
-          if(MODE !=5 && MODE != 6)
-            sendAndroidMessage(1);
+          if(MODE ==4) {sendAndroidMessage(1);}
         }
         
         if(i<INIT_WIND_TIME*M && i%10==0)        // FAN 속도 증가 단계
@@ -329,9 +328,7 @@ void sleepModeWorking(){
           if(emergencyCheck()){
             Serial.println(" └ 농도 200,000 ppm 초과 비상모드 작동 "); 
             VALVE(OFF);
-            MODE = 9;
-            sendAndroidMessage(1);    // 정보 송신
-            MODE = 4;
+            MODE = 9;sendAndroidMessage(1);MODE = 4;    // 정보 송신
           }
           else VALVE(ON);  
         }
@@ -361,11 +358,9 @@ void sleepModeWorking(){
           for(int j=0;;j++){
             delay(1);
             if(j==1000){
-              Serial.print(">");
-               MODE = 8;
-               sendAndroidMessage(1);    // 정보 송신
-               MODE = 5;
-              j=0;
+               Serial.print(">");
+               MODE = 8;sendAndroidMessage(1);MODE = 5;    // 정보 송신
+               j=0;
             }
             parseAndroidMessage();          // 명령 처리
             keyInterrupt(300);
@@ -630,10 +625,8 @@ void parseAndroidMessage(){
               _printf("\nFrom Android >> Next 버튼\n");
               if(!modeNextEnable)
                    Serial.println("다음 모드로 이동 불가");
-              else{
+              else
                   MODE++;
-                  sendAndroidMessage(1);
-              }
           }
           else if(c == 'b'){
               _printf("\nFrom Android >> Back 버튼\n");
