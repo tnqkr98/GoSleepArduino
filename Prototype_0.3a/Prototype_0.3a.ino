@@ -28,10 +28,10 @@
 #define DIST_UPPER       30     // 거리 최대
 #define NUM_PIXELS       19     // 네오픽셀 LED 개수 
 
-#define SLEEP_MODE_TOTAL 22      // 수면모드 진행시간(A분 = B+C+D  수식에 맞게 설정할것)  defalut : 22 분
-#define INIT_WIND_TIME    2      // 초기 B분간 팬속도 증가  default : 2 분
-#define CO2_WIND_TIME    15      // C분간 Co2 분 사        default : 15 분
-#define FIN_WIND_TIME     5      // D분간 팬속도 감소       default :  5 분
+#define SLEEP_MODE_TOTAL  3      // 수면모드 진행시간(A분 = B+C+D  수식에 맞게 설정할것)  defalut : 22 분
+#define INIT_WIND_TIME    1      // 초기 B분간 팬속도 증가  default : 2 분
+#define CO2_WIND_TIME     1      // C분간 Co2 분 사        default : 15 분
+#define FIN_WIND_TIME     1      // D분간 팬속도 감소       default :  5 분
 
 #define ALARM_LED_TIME   15      // 기상모드 LED 시작x분전(x>=y)    default : 15분
 #define ALARM_FAN_TIME   15      // 기상모드 FAN 시작y분전          default : 15분
