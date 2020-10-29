@@ -1,0 +1,354 @@
+[33mcommit 39f1fa83fbf2d86bf717eb0e4069bf26af20755b[m[33m ([m[1;36mHEAD -> [m[1;32mmaster[m[33m, [m[1;31morigin/master[m[33m)[m
+Author: Park Dong Han <tnqkr98@naver.com>
+Date:   Tue Oct 27 11:04:59 2020 +0900
+
+    back up
+
+[33mcommit d569b1af7b2a5d36b928889c8f58b7d32be054cd[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Mon Oct 19 19:55:14 2020 +0900
+
+    Fix Bugs
+
+[33mcommit de948c4503c8fe1b4ceefb0947395ccf75d2bbf8[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Fri Oct 16 23:50:46 2020 +0900
+
+    Update android ui refreash protocol
+
+[33mcommit debbd111e05986acac7728374c34a6959179f262[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Thu Oct 15 22:45:34 2020 +0900
+
+    Ultralight RFID Module Added
+
+[33mcommit c364dc5a2cc7b5841d6115f051b53aac2ff23f26[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Thu Oct 8 20:20:37 2020 +0900
+
+    Update Emergency Check
+
+[33mcommit d8d2e3d577971889bc92a41a3b8a757cbed4ae0c[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Thu Oct 1 22:08:24 2020 +0900
+
+    long sleep update
+
+[33mcommit 0360abdfe5bde2a4f4f793fdad3717a2452f2868[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Fri Sep 25 17:00:39 2020 +0900
+
+    Update Prototype 0.2b
+
+[33mcommit 9e6dd3da376c2162bbde52d78f0fcd7571f22283[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Tue Sep 15 16:39:25 2020 +0900
+
+    Fix Motor Driver and RTC internet Sync
+
+[33mcommit 6966ce719517c05f80bd9735117bcbc3fdb2c6c2[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Thu Sep 10 21:11:18 2020 +0900
+
+    CRC32 TEST
+
+[33mcommit bb192ae16a6b5eed6a6d0eb60ebf47eb35d4b97e[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Fri Sep 4 17:26:08 2020 +0900
+
+    Update AutoRTC
+
+[33mcommit 253f6336eb07f4cc5dea7bd3044876ece084bdca[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Thu Sep 3 17:14:25 2020 +0900
+
+    Motor Driver Update
+
+[33mcommit 0f01ffb809bcddf9913d1a7f187fd0797c3cdd42[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Thu Aug 27 20:03:56 2020 +0900
+
+    Fan Min Value Edited
+
+[33mcommit 8c938718ca42f9b7ce7709b9c5354ea02ad47268[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Tue Aug 25 10:23:29 2020 +0900
+
+    version control
+
+[33mcommit 9592a170f7895759a7d2e5207fdbede7d0af66a4[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Wed Aug 19 21:34:06 2020 +0900
+
+    small update
+
+[33mcommit e7c06a451476c241c9fb22fe84dad19e51a702a9[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Tue Aug 18 23:31:19 2020 +0900
+
+    small update
+
+[33mcommit 9ba509b454da3f5101e34fc19a73630885d41be2[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Sun Aug 16 22:10:22 2020 +0900
+
+    updatd
+
+[33mcommit 09fbf5e92535f18a92b5697fe1c76755c087552a[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Thu Aug 13 20:57:10 2020 +0900
+
+    Bug fix
+
+[33mcommit 2f0fe52c5d7e4b0c690223ccef0151bee5f639a0[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Thu Aug 6 21:10:18 2020 +0900
+
+    Developer System Update
+
+[33mcommit d410a4b5be50bd111047926f25a0e694496bf938[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Wed Aug 5 19:21:18 2020 +0900
+
+    [Update Function] Configuration & some values chanage
+
+[33mcommit e52c9c3baeed37d3df00b0d82cc88477b5742ce0[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Tue Aug 4 15:41:29 2020 +0900
+
+    [Add Function] Developer Configuration
+
+[33mcommit 2c3a154363b7c9210ac34886f3b59387ce45e357[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Mon Aug 3 22:49:38 2020 +0900
+
+    RFID Update/Read RFID function added
+
+[33mcommit b3487c0458cf2e986a44ca009a740acbfcb4a596[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Thu Jul 30 23:54:38 2020 +0900
+
+    NFC update
+
+[33mcommit dd2dc76e88f12c29474ae658a1a4df42be313c45[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Wed Jul 29 23:05:43 2020 +0900
+
+    NFC setting
+
+[33mcommit b46c7eb052b030e2a73304eb34408276b16683f6[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Mon Jul 27 16:41:29 2020 +0900
+
+    Fix Mode Change Bugs
+
+[33mcommit c8209318070c4381642210e98adceefd252c46ce[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Mon Jul 27 13:28:07 2020 +0900
+
+    Update Wake mode
+
+[33mcommit 3acb97900c4a7832bb7191f3c9fc17fcf3864111[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Fri Jul 24 12:18:41 2020 +0900
+
+    Update AlarmType
+
+[33mcommit 0c896ae370b5976fc419e26b15a837d1b9f0ad41[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Thu Jul 23 18:01:11 2020 +0900
+
+    Update WAKE_MODE & DIST_MODE
+
+[33mcommit 96301c7bc07fd217c6bdf60bd4414a0d38046483[m
+Merge: 47e45ae 72bcd61
+Author: donghan <tnqkr98@naver.com>
+Date:   Wed Jul 22 16:50:19 2020 +0900
+
+    Merge branch 'master' of https://github.com/tnqkr98/GoSleepArduino
+
+[33mcommit 47e45ae6bbc2174bb53a18018222c5caf98936b0[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Wed Jul 22 16:49:59 2020 +0900
+
+    Update Arduino PIN
+
+[33mcommit 72bcd61834c30541ed9b058243057d7eeed3c19b[m
+Author: Dong Han Park <48381543+tnqkr98@users.noreply.github.com>
+Date:   Mon Jul 6 21:30:35 2020 +0900
+
+    Create README.md
+
+[33mcommit 3d31ef18ee10c3dd15f87a0956648efd1a60b87b[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Fri Jul 3 10:15:23 2020 +0900
+
+    Add Module - awd
+
+[33mcommit c003543a243a40c728ce4d775af2f98ed0f481ef[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Mon Jun 29 18:31:04 2020 +0900
+
+    practice 6/29 - 2
+
+[33mcommit 5a3e2d86bfe3388fae4108719adcb5745c234903[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Mon Jun 22 17:00:46 2020 +0900
+
+    Update Function - KeyInterrupt2(int)
+
+[33mcommit a1cb2a0ec6ed2a338aebd9cd3692a0e1c8325bce[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Mon Jun 22 16:05:30 2020 +0900
+
+    Update Function - keyInterrupt2()
+
+[33mcommit db990df8fdfbf11de5046b7adcb1d4d08209d0ed[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Mon Jun 22 15:31:07 2020 +0900
+
+    Add Function - KeyInterrupt()
+
+[33mcommit 4af0b42b0f866d1376d3d574a1d4886184b61ae3[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Mon Jun 15 16:11:45 2020 +0900
+
+    Sleep Mode Function Update
+
+[33mcommit 4177ad830fb714d9bd0b219616bb787633f97ee5[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Mon Jun 15 15:42:52 2020 +0900
+
+    Time System Update
+
+[33mcommit dab3815d412bea68176b16bf6b94d52289cf05e3[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Mon Jun 15 14:33:43 2020 +0900
+
+    Sleep Mode System Update
+
+[33mcommit d11fd38d2237287ed4a8fe59812de8890f95cd57[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Fri Jun 12 16:19:56 2020 +0900
+
+    NeoPixel 4 -> 8, DistanseCheck Error Fix
+
+[33mcommit b76256bb129b0618296d31536fca3073c840e7b0[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Fri Jun 12 14:22:42 2020 +0900
+
+    Add DHE Sensor Exception
+
+[33mcommit 1be9c3d938eecac8a7a0bfa3c57998e891e7e92c[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Thu Jun 11 16:20:17 2020 +0900
+
+    Vibration Module Problem Fix
+
+[33mcommit ce2089379eec823679dce4b6990478fcdf7df61c[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Wed Jun 10 14:48:31 2020 +0900
+
+    Exception added, cds&touch sensor module added
+
+[33mcommit c93739274a814324b8a0829c305c16915a3f74ab[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Tue Jun 9 17:51:20 2020 +0900
+
+    [Update Arduino]Arduino Mega update
+
+[33mcommit da618b7fd08c5982a292cd9fce21f2baa9843625[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Mon Jun 8 15:25:08 2020 +0900
+
+    [Add Function]Touch Module added
+
+[33mcommit 77e9f9287225b01e029a531d7ef325e2ea39fb5a[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Fri Jun 5 16:59:34 2020 +0900
+
+    Update Co2MUX5x5 & HEAD2X2
+
+[33mcommit a09f0e2e43bc5910265d93a30d826a7f71254487[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Thu Jun 4 17:55:33 2020 +0900
+
+    Add Co2 Sensing Module
+
+[33mcommit 7933b22259943c05299def9db5d530294a18b642[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Thu May 28 18:01:29 2020 +0900
+
+    added iulluminance sensing to prototype no.2
+
+[33mcommit 6deb43085e81a82232413b8833a2f0b2ee990f64[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Wed May 27 17:37:54 2020 +0900
+
+    prototype mega update
+
+[33mcommit fcfc2ce99ac4d08a396227f4abb9892a6847d614[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Tue May 26 17:59:58 2020 +0900
+
+    small update
+
+[33mcommit e3958868d1a89ace9c674b75b69350df9d4db5a8[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Mon May 25 17:55:25 2020 +0900
+
+    bluetooth pairing update
+
+[33mcommit ce5081dfdb3b74fbc399e1f8a627fbd18c220854[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Fri May 22 17:55:22 2020 +0900
+
+    tem,hum error fix
+
+[33mcommit 6c50b16786071fa9c2bb5cc40f20427faef1f0af[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Fri May 22 11:30:24 2020 +0900
+
+    directory update
+
+[33mcommit 123b9399f53c9441e51b0de7b3f231fd764ef1fc[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Thu May 21 18:01:40 2020 +0900
+
+    prototype update 05/21
+
+[33mcommit 03aa83162d4ed1a9bee55dba0219b24ad4253211[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Wed May 20 18:01:08 2020 +0900
+
+    prototype update
+
+[33mcommit f136e1ed411cb88550f047d92fe0df50ed9b1ede[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Wed May 20 13:53:23 2020 +0900
+
+    1st prototype
+
+[33mcommit 141be8879f2adff3cc2f32a4e37b6907ff7d4ccc[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Tue May 19 12:31:19 2020 +0900
+
+    development update
+
+[33mcommit ca88ff075da8c3ea86252fd75ead308a88291ad0[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Mon May 18 18:13:48 2020 +0900
+
+    sleep mode update
+
+[33mcommit 2cf44aa4c6087b4287e869b68bbc49ef20f1c5f8[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Fri May 15 18:04:30 2020 +0900
+
+    mode update
+
+[33mcommit 32c394ac86cfb7e295135d4e5c2f9edb2baefc38[m
+Author: donghan <tnqkr98@naver.com>
+Date:   Fri May 15 12:11:06 2020 +0900
+
+    gosleep arduino first code
